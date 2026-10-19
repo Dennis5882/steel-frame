@@ -2,6 +2,7 @@
    人자형 가새는 아래층 양 기둥 하단 → 위층 보 중앙. 보 중앙에 절점을 넣어 보를 둘로 나누고, 설계 부재는 원래 보 하나(member)로 묶는다.
    예제 검증: 절점 129 · 요소 284 (docs/tutorial-cn-braced-frame.md 1절). */
 import type { FrameElement, FrameModel, FrameNode, FrameSpec } from './types'
+import { planConnected } from './plan'
 
 const EPS = 1e-6
 const near = (a: number, b: number) => Math.abs(a - b) < EPS
@@ -16,8 +17,7 @@ export function levelsOf(spec: FrameSpec): number[] {
 export function panelExists(spec: FrameSpec, i: number, j: number): boolean {
   const { xs, ys } = spec
   if (i < 0 || j < 0 || i >= xs.length - 1 || j >= ys.length - 1) return false
-  const cx = (xs[i] + xs[i + 1]) / 2, cy = (ys[j] + ys[j + 1]) / 2
-  return !spec.voids.some((v) => cx > v.x0 && cx < v.x1 && cy > v.y0 && cy < v.y1)
+  return !spec.removed.some(([a, b]) => a === i && b === j)
 }
 
 export function validateSpec(spec: FrameSpec): string[] {
@@ -27,6 +27,7 @@ export function validateSpec(spec: FrameSpec): string[] {
   if (spec.ys.length < 2 || !inc(spec.ys)) errs.push('ys must have ≥2 increasing grid lines')
   if (!spec.heights.length || spec.heights.some((h) => !(h > 0))) errs.push('story heights must be > 0')
   if (spec.storyNames.length !== spec.heights.length + 1) errs.push('storyNames length must be heights + 1')
+  if (!errs.length && !planConnected(spec)) errs.push('plan must be one connected region of panels')
   return errs
 }
 

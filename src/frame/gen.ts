@@ -6,7 +6,7 @@ import { elementLength } from './geometry'
 import { ALPHA_MAX, SFI, frameCombos, tgOf, windLoads, type CaseKey } from './loads'
 
 const CASE: Record<CaseKey, { name: string; anal: 'ST' | 'RS' }> = {
-  D: { name: 'DL', anal: 'ST' }, L: { name: 'LL', anal: 'ST' }, WX: { name: 'WX', anal: 'ST' }, WY: { name: 'WY', anal: 'ST' },
+  D: { name: 'DL', anal: 'ST' }, L: { name: 'LL', anal: 'ST' }, LF: { name: 'LF', anal: 'ST' }, S: { name: 'SL', anal: 'ST' }, WX: { name: 'WX', anal: 'ST' }, WY: { name: 'WY', anal: 'ST' },
   RX: { name: 'RX', anal: 'RS' }, RY: { name: 'RY', anal: 'RS' },
 }
 export const caseName = (k: CaseKey) => CASE[k].name
@@ -72,7 +72,9 @@ export function framePayloads(spec: FrameSpec, model: FrameModel): FramePayloads
     bADDSIGN: true, iSIGNTYPE: 0, bMODE: false, aFUNCNAME: ['CN-RS'],
     ...(s.accidentalEccentricity ? { bACCECC: true, bACCECC_AUTO: true, ACCECC_PERCENT: 5, bACCECC_CONSIDER_GL: false, bACCECC_MINIMUM_TORSION: false, aACCECC_ECCEN_LIST: [] } : {}) })
 
-  const combos = frameCombos()
+  /* 적설: 지붕 SL = μr·s0, 바닥 활하중만 LF (적설 조합용). 없으면 예제와 같은 4케이스 */
+  const snow = spec.loads.roofSnow * spec.loads.snowMu > 0
+  const combos = frameCombos(snow)
   const LCOM: Record<number, object> = {}
   combos.forEach((c, i) => {
     LCOM[i + 1] = { NAME: c.name, ACTIVE: 'ACTIVE', iTYPE: 0, DESC: c.desc, vCOMB: c.terms.map(([k, f]) => ({ ANAL: CASE[k].anal, LCNAME: CASE[k].name, FACTOR: f })) }
@@ -84,15 +86,20 @@ export function framePayloads(spec: FrameSpec, model: FrameModel): FramePayloads
       PARAM: [{ P_TYPE: 2, ELAST: E_KN_M2, POISN: 0.3, THERMAL: 1.2e-5, DEN: 78.5, MASS: 78.5 / 9.806 }] } },
     SECT: { 1: sect(spec.sections.beam), 2: sect(spec.sections.column), 3: sect(spec.sections.brace) },
     NODE, ELEM, CONS,
-    STLD: { 1: { NAME: 'DL', TYPE: 'D', DESC: 'Dead' }, 2: { NAME: 'LL', TYPE: 'L', DESC: 'Live' }, 3: { NAME: 'WX', TYPE: 'W', DESC: 'Wind X' }, 4: { NAME: 'WY', TYPE: 'W', DESC: 'Wind Y' } },
+    STLD: { 1: { NAME: 'DL', TYPE: 'D', DESC: 'Dead' }, 2: { NAME: 'LL', TYPE: 'L', DESC: 'Live' }, 3: { NAME: 'WX', TYPE: 'W', DESC: 'Wind X' }, 4: { NAME: 'WY', TYPE: 'W', DESC: 'Wind Y' },
+      ...(snow ? { 5: { NAME: 'SL', TYPE: 'S', DESC: 'Roof snow' }, 6: { NAME: 'LF', TYPE: 'L', DESC: 'Floor live (snow combinations)' } } : {}) },
     BODF: { 1: { LCNAME: 'DL', GROUP_NAME: '', FV: [0, 0, -1] } },
     FBLD: {
-      1: { NAME: 'FLOOR', DESC: '', ITEM: [{ LCNAME: 'DL', FLOOR_LOAD: -spec.loads.floorDead, OPT_SUB_BEAM_WEIGHT: true }, { LCNAME: 'LL', FLOOR_LOAD: -spec.loads.floorLive, OPT_SUB_BEAM_WEIGHT: true }] },
-      2: { NAME: 'ROOF', DESC: '', ITEM: [{ LCNAME: 'DL', FLOOR_LOAD: -spec.loads.roofDead, OPT_SUB_BEAM_WEIGHT: true }, { LCNAME: 'LL', FLOOR_LOAD: -spec.loads.roofLive, OPT_SUB_BEAM_WEIGHT: true }] },
+      1: { NAME: 'FLOOR', DESC: '', ITEM: [{ LCNAME: 'DL', FLOOR_LOAD: -spec.loads.floorDead, OPT_SUB_BEAM_WEIGHT: true }, { LCNAME: 'LL', FLOOR_LOAD: -spec.loads.floorLive, OPT_SUB_BEAM_WEIGHT: true },
+        ...(snow ? [{ LCNAME: 'LF', FLOOR_LOAD: -spec.loads.floorLive, OPT_SUB_BEAM_WEIGHT: true }] : [])] },
+      2: { NAME: 'ROOF', DESC: '', ITEM: [{ LCNAME: 'DL', FLOOR_LOAD: -spec.loads.roofDead, OPT_SUB_BEAM_WEIGHT: true }, { LCNAME: 'LL', FLOOR_LOAD: -spec.loads.roofLive, OPT_SUB_BEAM_WEIGHT: true },
+        ...(snow ? [{ LCNAME: 'SL', FLOOR_LOAD: -spec.loads.roofSnow * spec.loads.snowMu, OPT_SUB_BEAM_WEIGHT: true }] : [])] },
     },
     FBLA, BMLD, CNLD, STOR,
     STYP: { 1: { bSELFWEIGHT: true } },
-    LTOM: { 1: { DIR: 'XY', bNODAL: true, bBEAM: true, bFLOOR: true, bPRES: false, GRAV: 9.806, vLC: [{ LCNAME: 'DL', FACTOR: 1 }, { LCNAME: 'LL', FACTOR: s.liveMassFactor }] } },
+    LTOM: { 1: { DIR: 'XY', bNODAL: true, bBEAM: true, bFLOOR: true, bPRES: false, GRAV: 9.806, vLC: snow  // 적설 시 중력대표값 D + ψ·LF + 0.5S (GB/T 50011 5.1.3: 지붕 활하중 불계입, 雪 0.5)
+      ? [{ LCNAME: 'DL', FACTOR: 1 }, { LCNAME: 'LF', FACTOR: s.liveMassFactor }, { LCNAME: 'SL', FACTOR: 0.5 }]
+      : [{ LCNAME: 'DL', FACTOR: 1 }, { LCNAME: 'LL', FACTOR: s.liveMassFactor }] } },
     EIGV: { 1: { TYPE: 'LANCZOS', iFREQ: s.modes, iITER: 20, iDIM: 1, TOL: 1e-10, bMINMAX: false, FRMIN: 0, FRMAX: 0, bSTRUM: false } },
     SPFC: { 1: { NAME: 'CN-RS', iTYPE: 1, iMETHOD: 0, SCALE: 1, GRAV: 9.806, DRATIO: s.damping,
       STR: { SPEC_CODE: 'CH2010', SFI: SFI[s.intensity], SC_: s.site, EQ_: 'FREQUENT' }, OPT: { NSC: s.group - 1, nLForce: 0 },

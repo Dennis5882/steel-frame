@@ -1,5 +1,5 @@
 /* 다층 강골조 라이브 실행 — 기준 예제(docs/tutorial-cn-braced-frame.md)를 Gen NX 에 만들고 해석·층 표·부재 검토 후 목표값과 대조.
-   Run: npx tsx scripts/live-frame.ts < /dev/null   (키: stdin → MAPI_KEY → .env)
+   Run: npx tsx scripts/live-frame.ts [--snow 0.45] < /dev/null   (키: stdin → MAPI_KEY → .env)
    현재 문서를 C:/temp 에 백업 저장한 뒤 새 문서에서 진행. 결과: output/frame/live-<시각>.json
    Gen 단계는 화면과 같은 src/frame/run.ts 를 쓴다. 주의(gen-api-cautions.md): Assign 본문 DELETE·STEELCODECHECK 호출 금지. */
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -19,7 +19,10 @@ const stamp = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 19).repla
 const log = (...a: unknown[]) => console.log(...a)
 const evidence: Record<string, unknown> = { stamp }
 
-const spec = TUTORIAL_SPEC, model = buildFrame(spec), P = framePayloads(spec, model)
+/* --snow <s0> : 예제에 지붕 적설을 더해 적설 케이스·조합(GB 50009 5.3.3, GB 55001)을 확인 */
+const snowArg = process.argv.indexOf('--snow'), s0 = snowArg > 0 ? Number(process.argv[snowArg + 1]) : 0
+const spec = s0 > 0 ? { ...TUTORIAL_SPEC, loads: { ...TUTORIAL_SPEC.loads, roofSnow: s0 } } : TUTORIAL_SPEC
+const model = buildFrame(spec), P = framePayloads(spec, model)
 log(`model: nodes ${model.nodes.length}, elements ${model.elements.length}, supports ${model.supports.length}, combos ${P.combos.length}`)
 for (const w of P.wind) log(`wind ${w.dir}: T1 ${w.T1.toFixed(3)} s, base ${w.base.toFixed(2)} kN, βz ${w.stories.map((s) => s.betaz.toFixed(3)).join('/')}`)
 

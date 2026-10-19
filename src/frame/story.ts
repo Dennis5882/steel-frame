@@ -87,7 +87,7 @@ export function storyReview(spec: FrameSpec, model: FrameModel, t: StoryTables, 
       }
       if (v !== null) rows.push({ story: nm, value: v, limit: 1 / 250, status: v <= 1 / 250 ? 'ok' : 'ng', note })
     })
-    items.push({ key: 'drift', clause: 'GB 50011 5.5.1', dir, rows, status: worst(rows) })
+    items.push({ key: 'drift', clause: 'GB/T 50011 5.5.1', dir, rows, status: worst(rows) })
 
     /* 扭转位移比 */
     const tor = dir === 'X' ? t.torsionX : t.torsionY
@@ -95,7 +95,7 @@ export function storyReview(spec: FrameSpec, model: FrameModel, t: StoryTables, 
       const v = n(r['Maximum Value/Story Drift']) / Math.max(1e-12, n(r['Average Value of Extreme Points/Story Drift']))
       return { story: r.Story, value: v, limit: 1.2, status: v <= 1.2 ? 'ok' : v <= 1.5 ? 'warn' : 'ng', note: v > 1.2 ? 'torsionally irregular (3.4.3)' : undefined }
     })
-    items.push({ key: 'torsion', clause: 'GB 50011 3.4.3 / 3.4.4', dir, rows: trows, status: worst(trows) })
+    items.push({ key: 'torsion', clause: 'GB/T 50011 3.4.3 / 3.4.4', dir, rows: trows, status: worst(trows) })
 
     /* 侧向刚度 */
     const st = byStory(dir === 'X' ? t.stiffX : t.stiffY)
@@ -108,7 +108,7 @@ export function storyReview(spec: FrameSpec, model: FrameModel, t: StoryTables, 
       const v = Math.min(r1, r2)
       krows.push({ story: nm, value: v, limit: 1, status: v >= 1 ? 'ok' : 'warn', note: `K/0.7K_up ${r1.toFixed(3)}${Number.isFinite(r2) ? ` · K/0.8K_avg3 ${r2.toFixed(3)}` : ''}` })
     })
-    items.push({ key: 'stiffness', clause: 'GB 50011 3.4.3 表3.4.3-2', dir, rows: krows, status: worst(krows) })
+    items.push({ key: 'stiffness', clause: 'GB/T 50011 3.4.3 表3.4.3-2', dir, rows: krows, status: worst(krows) })
 
     /* 楼层承载力 */
     const cap = storyShearCapacity(spec, model, dir, colStrongAxis)
@@ -118,7 +118,7 @@ export function storyReview(spec: FrameSpec, model: FrameModel, t: StoryTables, 
       const v = cap[i] / cap[i + 1]
       crows.push({ story: nm, value: v, limit: 0.8, status: v >= 0.8 ? 'ok' : 'warn', note: `V ${cap[i].toFixed(0)} / V_up ${cap[i + 1].toFixed(0)} kN` })
     })
-    items.push({ key: 'capacity', clause: 'GB 50011 3.4.3 表3.4.3-2', dir, rows: crows, status: worst(crows) })
+    items.push({ key: 'capacity', clause: 'GB/T 50011 3.4.3 表3.4.3-2', dir, rows: crows, status: worst(crows) })
 
     /* 剪重比 */
     const sh = dir === 'X' ? t.shearX : t.shearY, lmin = LAMBDA_MIN[spec.seismic.intensity]
@@ -126,7 +126,7 @@ export function storyReview(spec: FrameSpec, model: FrameModel, t: StoryTables, 
       const v = n(r[`Story Shear Force Coefficient/${dir}`])
       return { story: r.Story, value: v, limit: lmin, status: v >= lmin ? 'ok' : 'ng' }
     })
-    items.push({ key: 'shearWeight', clause: 'GB 50011 5.2.5', dir, rows: srows, status: worst(srows) })
+    items.push({ key: 'shearWeight', clause: 'GB/T 50011 5.2.5', dir, rows: srows, status: worst(srows) })
 
     /* 二阶效应 θ = ΣN Δu / (ΣH h) — ΣN = 위 층 중력대표값(Weight Sum), ΣH = 층전단, Δu = 질량중심 층간변위 */
     const prow: StoryRow[] = []
@@ -158,7 +158,7 @@ export function storyReview(spec: FrameSpec, model: FrameModel, t: StoryTables, 
       { story: 'X', value: ex / 100, limit: 0.9, status: ex >= 90 ? 'ok' : 'ng' },
       { story: 'Y', value: ey / 100, limit: 0.9, status: ey >= 90 ? 'ok' : 'ng' },
     ]
-    items.push({ key: 'effMass', clause: 'GB 50011 5.2.2', rows, status: worst(rows) })
-  } else items.push({ key: 'effMass', clause: 'GB 50011 5.2.2', rows: [], status: 'na' })
+    items.push({ key: 'effMass', clause: 'GB/T 50011 5.2.2', rows, status: worst(rows) })
+  } else items.push({ key: 'effMass', clause: 'GB/T 50011 5.2.2', rows: [], status: 'na' })
   return items
 }

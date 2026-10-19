@@ -13,7 +13,7 @@ export const FRAME_TEMPLATES: Record<FrameTemplateKey, { spec: FrameSpec }> = {
   /** 정형 가새골조 5×3 베이, 3층 — 외곽 골조선 중앙 베이에 人자형 가새 */
   braced: {
     spec: base({
-      xs: [0, 6, 12, 18, 24, 30], ys: [0, 6, 12, 18], baseZ: 0, heights: [4.2, 3.6, 3.6], storyNames: ['1F', '2F', '3F', 'Roof'], voids: [],
+      xs: [0, 6, 12, 18, 24, 30], ys: [0, 6, 12, 18], baseZ: 0, heights: [4.2, 3.6, 3.6], storyNames: ['1F', '2F', '3F', 'Roof'], removed: [],
       sections: { beam: 'HN 350x175x7/11', column: 'HW 300x300x10/15', brace: 'HW 250x250x9/14' },
       braces: [
         { axis: 'X', line: 0, a: 12, b: 18, type: 'chevron' }, { axis: 'X', line: 18, a: 12, b: 18, type: 'chevron' },
@@ -25,7 +25,7 @@ export const FRAME_TEMPLATES: Record<FrameTemplateKey, { spec: FrameSpec }> = {
   /** 순수 모멘트골조 3×2 베이, 3층 — 가새 없음 (기둥 μ = 附录 E.0.2 有侧移) */
   moment: {
     spec: base({
-      xs: [0, 8, 16, 24], ys: [0, 6, 12], baseZ: 0, heights: [4.5, 3.9, 3.9], storyNames: ['1F', '2F', '3F', 'Roof'], voids: [],
+      xs: [0, 8, 16, 24], ys: [0, 6, 12], baseZ: 0, heights: [4.5, 3.9, 3.9], storyNames: ['1F', '2F', '3F', 'Roof'], removed: [],
       sections: { beam: 'HN 400x200x8/13', column: 'HW 400x400x13/21', brace: 'HW 150x150x7/10' },
       braces: [],
       design: { seismicGrade: 3, braced: { X: false, Y: false }, netAreaRatio: 0.85 },

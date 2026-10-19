@@ -116,7 +116,7 @@ export function runFrameDesign(spec: FrameSpec, members: DesignMember[], forces:
       if (!worst || r.ratio > worst.ratio) worst = r
     }
     if (!worst) throw new Error(`no forces for member ${m.id} (${m.role})`)
-    const detailRatio = Math.max(0, ...st.detailing.map((d) => d.ratio), ...worst.items.filter((i) => i.key === 'web' && i.clause.startsWith('GB 50011')).map((i) => i.ratio))
+    const detailRatio = Math.max(0, ...st.detailing.map((d) => d.ratio), ...worst.items.filter((i) => i.key === 'web' && i.clause.startsWith('GB/T 50011')).map((i) => i.ratio))
     results.push({ ...m, st, worst, ratio: worst.ratio, detailRatio })
   }
   const byRole = { column: null, beam: null, brace: null } as FrameDesign['byRole']

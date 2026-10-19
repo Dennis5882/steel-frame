@@ -540,6 +540,9 @@ export const en = {
   g_help_2: 'Release notes',
   g_help_2_cmd: 'release notes',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_1_2_1: 'The grid step is now a plan editor: click or drag grid cells to add or remove floor panels, or apply a preset shape (rectangle, L, T, cross, U, E, courtyard). Shapes are kept when spans change.',
+  rn_v1_1_2_2: 'Chevron braces are placed by clicking beam lines on the plan.',
+  rn_v1_1_2_3: 'Roof snow (basic snow pressure s₀, distribution factor μr) is added with GB 55001 combinations; snow is not combined with roof live load (GB 50009 5.3.3). The seismic code is labelled GB/T 50011-2010 (2024 edition), with the mandatory GB 55001/55002/55006 shown.',
   rn_v1_1_1_1: 'Load combinations now match the Gen NX automatic steel set (34): factored dead load 1.0 with live and wind, and ±1.4E for response spectrum cases. Governing combinations of the tutorial beam and brace now match Gen.',
   rn_v1_1_1_2: 'Brace results also show the ratio without the GB 50011 8.2.6 reduction ψ for comparison with Gen NX; the check itself still applies ψ and the 8.4.1 slenderness limit.',
   rn_v1_1_0_1: 'The modelling workflow is now for multi-storey steel frames: grid, storeys, material and sections, chevron bracing, floor loads, wind and seismic, then a final check. Three templates: the Gen NX L-shaped braced frame example, a regular braced frame and a moment frame.',

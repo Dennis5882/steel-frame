@@ -15,6 +15,7 @@ import { framePayloads } from '../src/frame/gen'
 import type { ElementForces } from '../src/frame/results'
 import { FRAME_TEMPLATES } from '../src/frame/templates'
 import { frameSectionNames } from '../src/frame/sections'
+import { PLAN_SHAPES, braceBays, planConnected, setGrid, setPanel, shapeFits, shapeRemoved, toggleBrace } from '../src/frame/plan'
 
 let checks = 0
 const ok = (cond: unknown, msg: string) => { assert.ok(cond, msg); checks++ }
@@ -47,6 +48,47 @@ for (const [k, tp] of Object.entries(FRAME_TEMPLATES)) {
 }
 { const mt = FRAME_TEMPLATES.moment.spec, cols = designMembers(mt, buildFrame(mt)).filter((x) => x.role === 'column')
   ok(cols.every((c) => c.muX >= 1 && c.muY >= 1), 'moment frame columns use sway μ ≥ 1 (E.0.2)') }
+
+/* 적설 (GB 50009 5.3.3·7.1.1, GB 55001 3.1.13, GB/T 50011 5.1.3) — s0 = 0 이면 예제 그대로, 있으면 S 케이스·조합 추가 */
+ok(!('5' in (P.STLD as object)) && P.combos.every((c) => c.terms.every(([k]) => k !== 'S' && k !== 'LF')), 'no snow: no SL/LF case, 34 Gen combos unchanged')
+{
+  const sp = JSON.parse(JSON.stringify(spec)); sp.loads.roofSnow = 0.45; sp.loads.snowMu = 1.2
+  const ps = framePayloads(sp, model), cs = ps.combos, sk = 0.45 * 1.2
+  ok(cs.length === 34 + 46, `snow: 26 + 46 snow + 8 seismic combos (${cs.length})`)
+  ok(cs.every((c) => !(c.terms.some(([k]) => k === 'S') && c.terms.some(([k]) => k === 'L'))), 'snow never combined with roof live (L) — GB 50009 5.3.3')
+  ok(cs.filter((c) => !c.seismic && c.terms.some(([k]) => k === 'S')).every((c) => { const v = c.terms.filter(([k]) => k !== 'D'); return v.filter(([, f]) => Math.abs(f) === 1.5).length === 1 && v.every(([k, f]) => Math.abs(f) === 1.5 || Math.abs(f) === (k === 'WX' || k === 'WY' ? 0.9 : 1.05)) }), 'snow combos: one leading 1.5, others 1.5ψc (S/LF 0.7, W 0.6)')
+  ok(cs.filter((c) => c.seismic).every((c) => c.terms.some(([k, f]) => k === 'S' && Math.abs(f - 0.5 * c.terms[0][1]) < 1e-12) && !c.terms.some(([k]) => k === 'L')), 'seismic G_E = D + 0.5LF + 0.5S (GB/T 50011 5.1.3)')
+  const roof = (ps.FBLD as any)[2].ITEM.find((i: any) => i.LCNAME === 'SL')
+  near(-roof.FLOOR_LOAD, sk, 1e-12, 'roof SL = μr·s0 (GB 50009 7.1.1)')
+  ok((ps.LTOM as any)[1].vLC.some((v: any) => v.LCNAME === 'SL' && v.FACTOR === 0.5) && !(ps.LTOM as any)[1].vLC.some((v: any) => v.LCNAME === 'LL'), 'mass: snow 0.5, roof live excluded')
+  const gs = gravityTotals(sp, model)
+  ok(Math.abs(gs.snow - sk * 288) < 1e-9 && gs.lf === 2 * 288 * 3, 'snow / floor-live totals for equilibrium')
+}
+
+/* 평면 편집 (src/frame/plan.ts): 형상 프리셋은 항상 하나로 이어진 평면, 예제 L자 = 프리셋 L, 스팬 변경 시 패널·가새 번호 유지 */
+ok(JSON.stringify(shapeRemoved('L', 4, 4)) === JSON.stringify(spec.removed), 'tutorial L-shape = preset L on 4×4 grid')
+for (const [n, m] of [[4, 4], [5, 3], [6, 6], [3, 5], [7, 5]]) for (const sh of PLAN_SHAPES) {
+  if (!shapeFits(sh, n, m)) continue
+  const sp = JSON.parse(JSON.stringify(spec)); sp.xs = Array.from({ length: n + 1 }, (_, i) => i * 6); sp.ys = Array.from({ length: m + 1 }, (_, j) => j * 5)
+  sp.removed = shapeRemoved(sh, n, m); sp.braces = []
+  const md = buildFrame(sp)
+  ok(planConnected(sp) && md.floorArea === (n * m - sp.removed.length) * 30 && (sh === 'rect' || sp.removed.length > 0), `shape ${sh} on ${n}×${m}: connected, area ${md.floorArea}`)
+}
+{
+  const sp = JSON.parse(JSON.stringify(spec))
+  const before = braceBays(sp).map((b) => `${b.axis}${b.i},${b.j}`).sort().join()
+  setGrid(sp, [0, 7, 14, 21, 28], [0, 5, 10, 15, 20])
+  ok(braceBays(sp).map((b) => `${b.axis}${b.i},${b.j}`).sort().join() === before && sp.braces.length === 6 && buildFrame(sp).elements.length === 284, 'span change keeps panels and brace bays by index (284 elements)')
+  setGrid(sp, [0, 7, 14, 21], sp.ys)
+  ok(sp.braces.every((b: any) => b.axis !== 'Y' || b.line <= 21) && braceBays(sp).every((b) => b.i < 3 || b.axis === 'Y'), 'removing a span drops brace bays beyond the grid')
+  const sq = JSON.parse(JSON.stringify(spec)); setPanel(sq, 2, 3, false); setPanel(sq, 3, 3, false)
+  ok(braceBays(sq).length === 6, 'removing panels keeps braces until pruned')
+  const sr = JSON.parse(JSON.stringify(spec)); toggleBrace(sr, 'X', 0, 4); ok(braceBays(sr).length === 7, 'toggle adds a bay on an existing edge')
+  toggleBrace(sr, 'X', 0, 4); ok(braceBays(sr).length === 6, 'toggle again removes it')
+  toggleBrace(sr, 'X', 0, 0); ok(braceBays(sr).length === 6, 'no brace on an edge outside the plan (L-shape void)')
+  const sd = JSON.parse(JSON.stringify(spec)); sd.removed = [[1, 0], [1, 1], [1, 2], [1, 3]]
+  ok(!planConnected(sd), 'a full-height removed column of panels splits the plan → rejected')
+}
 
 /* 2) 원문 대조 */
 const E01: [number, number, number][] = [[0, 0, 1], [0.05, 0, 0.99], [1, 1, 0.774], [0.5, 10, 0.685], [2, 3, 0.663], [10, 10, 0.549], [0.3, 0.2, 0.916]]

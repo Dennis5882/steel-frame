@@ -4,9 +4,6 @@
 export type Axis = 'X' | 'Y'
 export type FrameRole = 'column' | 'beam' | 'brace'
 
-/** 평면에서 빼는 직사각형 영역 (모든 층) — 격자 좌표 경계 */
-export interface PlanVoid { x0: number; x1: number; y0: number; y1: number }
-
 /** 가새 베이 — `axis` 방향 골조선(`line` = 직교 좌표) 위 a~b 구간의 각 베이에 人자형(역V) 가새 */
 export interface BraceBay { axis: Axis; line: number; a: number; b: number; type: 'chevron' }
 
@@ -15,6 +12,10 @@ export interface FrameLoads {
   floorDead: number; floorLive: number; roofDead: number; roofLive: number
   /** 외곽 보 선하중 (kN/m, 고정하중) */
   edgeFloor: number; edgeRoof: number
+  /** 지붕 기본설압 s0 (kN/m², GB 50009 7.1.2 / 附录 E, 50년) — 0 이면 적설 케이스 없음. 적설하중 sk = μr·s0 (7.1.1) */
+  roofSnow: number
+  /** 지붕 적설분포계수 μr (GB 50009 表7.2.1, 평지붕 1.0) */
+  snowMu: number
 }
 
 export interface CnWindSpec {
@@ -55,7 +56,8 @@ export interface FrameSpec {
   baseZ: number; heights: number[]
   /** 층 이름 (아래부터, 길이 = heights + 1: 마지막이 지붕) */
   storyNames: string[]
-  voids: PlanVoid[]
+  /** 평면에서 뺀 패널 [i, j] (모든 층) — i = X 스팬 번호, j = Y 스팬 번호 (0부터). 형상 편집: src/frame/plan.ts */
+  removed: [number, number][]
   material: 'Q235B' | 'Q355B'
   sections: Record<FrameRole, string>
   braces: BraceBay[]

@@ -1,4 +1,4 @@
-/* 다층 강골조 부재 검토 — GB 50017-2017 (2019 勘误 포함) + GB 50011-2010 (2016, 2024 局部修订) 내진 규정.
+/* 다층 강골조 부재 검토 — GB 50017-2017 (2019 勘误 포함) + GB/T 50011-2010 (2024年版) 내진 규정, 강제규범 GB 55002·GB 55006 우선.
    단위: 내부 N·mm, 입력 kN·kN·m. 원문 KB: E:/MIDAS PROGRAM/COde/CN/knowledge/{gb50017-2017,gb50011-2010}.
    - 강도 4.4.1 (Q355 = 2019 勘误), 단면등급 3.5.1, γx·γy 6.1.2 / 8.1.1
    - 보 6.1.1 강도, 6.1.3 전단, 6.2.3 + 附录 C.0.1 (2019 勘误: εk²) 횡비틀림
@@ -146,17 +146,17 @@ export function memberStatic(m: MemberInput): MemberStatic {
   const detailing: CheckItem[] = []
   const lim = (key: string, clause: string, demand: number, capacity: number) => detailing.push({ key, clause, demand, capacity, ratio: demand / capacity })
   if (m.role === 'column') {
-    lim('slender', 'GB 50011 8.3.1', Math.max(lambdaX, lambdaY), [60, 80, 100, 120][g - 1] * eps)
-    lim('flange', 'GB 50011 8.3.2', flangeRatio(s), [10, 11, 12, 13][g - 1] * eps)
-    lim('web', 'GB 50011 8.3.2', webRatio(s), [43, 45, 48, 52][g - 1] * eps)
+    lim('slender', 'GB/T 50011 8.3.1', Math.max(lambdaX, lambdaY), [60, 80, 100, 120][g - 1] * eps)
+    lim('flange', 'GB/T 50011 8.3.2', flangeRatio(s), [10, 11, 12, 13][g - 1] * eps)
+    lim('web', 'GB/T 50011 8.3.2', webRatio(s), [43, 45, 48, 52][g - 1] * eps)
   } else if (m.role === 'beam') {
-    lim('flange', 'GB 50011 8.3.2', flangeRatio(s), [9, 9, 10, 11][g - 1] * eps)
+    lim('flange', 'GB/T 50011 8.3.2', flangeRatio(s), [9, 9, 10, 11][g - 1] * eps)
     // 腹板 한계는 축압비 의존 — 조합별 검토에서 갱신. 여기서는 N = 0 상한
-    lim('web', 'GB 50011 8.3.2', webRatio(s), [60, 65, 70, 75][g - 1] * eps)
+    lim('web', 'GB/T 50011 8.3.2', webRatio(s), [60, 65, 70, 75][g - 1] * eps)
   } else {
-    lim('slender', 'GB 50011 8.4.1', Math.max(lambdaX, lambdaY), 120 * eps)
-    lim('flange', 'GB 50011 8.4.1', flangeRatio(s), [8, 9, 10, 13][g - 1] * eps)
-    lim('web', 'GB 50011 8.4.1', webRatio(s), [25, 26, 27, 33][g - 1] * eps)
+    lim('slender', 'GB/T 50011 8.4.1', Math.max(lambdaX, lambdaY), 120 * eps)
+    lim('flange', 'GB/T 50011 8.4.1', flangeRatio(s), [8, 9, 10, 13][g - 1] * eps)
+    lim('web', 'GB/T 50011 8.4.1', webRatio(s), [25, 26, 27, 33][g - 1] * eps)
   }
   return { st, eps, cls, gx, gy, lambdaX, lambdaY, phiX, phiY, phiB, phiBc, detailing }
 }
@@ -191,7 +191,7 @@ export function checkMember(m: MemberInput, ms: MemberStatic, combo: string, sei
     /* GB 50011 8.3.2 腹板: 72-100Nb/(Af) 등 (축압비) */
     const g = m.seismicGrade, nb = Nc / (s.A * f)
     const webLim = ([[72, 120, 60], [72, 100, 65], [80, 110, 70], [85, 120, 75]][g - 1])
-    add('web', 'GB 50011 8.3.2', webRatio(s), Math.min(webLim[0] - webLim[1] * nb, webLim[2]) * ms.eps)
+    add('web', 'GB/T 50011 8.3.2', webRatio(s), Math.min(webLim[0] - webLim[1] * nb, webLim[2]) * ms.eps)
   } else {
     /* 8.2.5 이축 압축휨 안정 (압축 시). βm·βt 는 단모멘트 비 (8.2.1) */
     const I = stations[0], J = stations[stations.length - 1]
@@ -215,7 +215,7 @@ export function checkMember(m: MemberInput, ms: MemberStatic, combo: string, sei
       /* GB 50011 8.2.6 가새 압축 (지진: ψ/γRE), 비지진 7.2.1. 인장 N/(An f) */
       const phi = Math.min(ms.phiX, ms.phiY), lam = Math.max(ms.lambdaX, ms.lambdaY)
       const lamN = lam / Math.PI * Math.sqrt(st.fy / E), psi = seismic ? 1 / (1 + 0.35 * lamN) : 1
-      if (Nc > 0) add('braceComp', seismic ? 'GB 50011 8.2.6' : 'GB 50017 7.2.1', Nc / (phi * s.A) * reB, psi * f)
+      if (Nc > 0) add('braceComp', seismic ? 'GB/T 50011 8.2.6' : 'GB 50017 7.2.1', Nc / (phi * s.A) * reB, psi * f)
       if (Nc > 0 && psi < 1) items[items.length - 1].psi = psi
       if (Nt > 0) add('braceTens', 'GB 50017 7.1.1', Nt * 1e3 / An * reS, f)
     }

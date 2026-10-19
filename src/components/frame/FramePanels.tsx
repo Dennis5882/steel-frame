@@ -51,6 +51,7 @@ export function FrameModelPanel() {
     <div className="scard"><h3>{t('sec_load')}</h3>
       <KV k={t('fr_dl_total')} v={`${f(g.dlExceptSelf, 1)} kN`} />
       <KV k={t('fr_ll_total')} v={`${f(g.ll, 1)} kN`} />
+      {g.snow > 0 && <KV k={t('fr_snow_total')} v={`${f(g.snow, 1)} kN`} />}
       {P.wind.map((w) => <KV key={w.dir} k={t('fr_wind_dir', w.dir)} v={`T₁ ${f(w.T1)} s · ${f(w.base, 1)} kN`} />)}
     </div>
     <div className="scard"><h3>{t('fr_wind_story')}</h3>

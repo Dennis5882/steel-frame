@@ -63,10 +63,12 @@ export function windLoads(spec: FrameSpec, model: FrameModel, dir: 'X' | 'Y'): W
 }
 
 /* ── 하중조합 ── */
-export type CaseKey = 'D' | 'L' | 'WX' | 'WY' | 'RX' | 'RY'
+/** LF = 바닥 활하중만 (적설 조합용 — 지붕 활하중과 적설은 동시 조합 안 함, GB 50009 5.3.3), S = 지붕 적설 */
+export type CaseKey = 'D' | 'L' | 'LF' | 'S' | 'WX' | 'WY' | 'RX' | 'RY'
 export interface Combo { name: string; desc: string; seismic: boolean; wind: boolean; terms: [CaseKey, number][] }
 
-export function frameCombos(): Combo[] {
+/** snow = 지붕 적설 있음 (spec.loads.roofSnow > 0). 없으면 Gen 자동 생성과 같은 34개 */
+export function frameCombos(snow = false): Combo[] {
   const out: Combo[] = []
   const add = (desc: string, seismic: boolean, terms: [CaseKey, number][]) =>
     out.push({ name: `sLCB${out.length + 1}`, desc, seismic, wind: terms.some(([k]) => k === 'WX' || k === 'WY'), terms })
@@ -79,9 +81,28 @@ export function frameCombos(): Combo[] {
   for (const d of [1.3, 1.0]) for (const [w, s] of W) add(`${d.toFixed(1)}D${sg(s)}1.5${w}`, false, [['D', d], [w, 1.5 * s]])
   for (const d of [1.3, 1.0]) for (const [w, s] of W) add(`${d.toFixed(1)}D+1.5L${sg(s)}0.9${w}`, false, [['D', d], ['L', 1.5], [w, 0.9 * s]])
   for (const d of [1.3, 1.0]) for (const [w, s] of W) add(`${d.toFixed(1)}D${sg(s)}1.5${w}+1.05L`, false, [['D', d], [w, 1.5 * s], ['L', 1.05]])
-  /* 지진: 중력대표값 G_E = D + 0.5L. RS 결과는 주모드 방향 부호(SPLC bADDSIGN)라 ±1.4E 를 따로 만든다 (GB 50011 5.4.1, γEh 1.4) */
+  /* 적설 (GB 55001 3.1.13: 주도 1.5, 동반 1.5ψc — ψc 적설 0.7·활 0.7·풍 0.6). 지붕 활하중과 동시 조합하지 않으므로 L 대신 바닥 활하중 LF 와 짝.
+     S 를 포함하는 부분집합 {S}, {S,LF}, {S,W}, {S,LF,W} 에서 각 변동하중이 한 번씩 주도 */
+  if (snow) for (const d of [1.3, 1.0]) {
+    const D = d.toFixed(1)
+    add(`${D}D+1.5S`, false, [['D', d], ['S', 1.5]])
+    add(`${D}D+1.5S+1.05LF`, false, [['D', d], ['S', 1.5], ['LF', 1.05]])
+    add(`${D}D+1.5LF+1.05S`, false, [['D', d], ['LF', 1.5], ['S', 1.05]])
+    for (const [w, s] of W) {
+      add(`${D}D+1.5S${sg(s)}0.9${w}`, false, [['D', d], ['S', 1.5], [w, 0.9 * s]])
+      add(`${D}D${sg(s)}1.5${w}+1.05S`, false, [['D', d], [w, 1.5 * s], ['S', 1.05]])
+      add(`${D}D+1.5S+1.05LF${sg(s)}0.9${w}`, false, [['D', d], ['S', 1.5], ['LF', 1.05], [w, 0.9 * s]])
+      add(`${D}D+1.5LF+1.05S${sg(s)}0.9${w}`, false, [['D', d], ['LF', 1.5], ['S', 1.05], [w, 0.9 * s]])
+      add(`${D}D${sg(s)}1.5${w}+1.05LF+1.05S`, false, [['D', d], [w, 1.5 * s], ['LF', 1.05], ['S', 1.05]])
+    }
+  }
+  /* 지진: 중력대표값 G_E = D + 0.5L (적설이 있으면 GB/T 50011 5.1.3 대로 지붕 활하중 대신 0.5S: D + 0.5LF + 0.5S).
+     RS 결과는 주모드 방향 부호(SPLC bADDSIGN)라 ±1.4E 를 따로 만든다 (GB/T 50011 5.4.1, γEh 1.4) */
   const E: [CaseKey, number][] = [['RX', 1], ['RY', 1], ['RX', -1], ['RY', -1]]
-  for (const d of [1.3, 1.0]) for (const [e, s] of E) add(`${d.toFixed(1)}(D+0.5L)${sg(s)}1.4${e}`, true, [['D', d], ['L', d * 0.5], [e, 1.4 * s]])
+  for (const d of [1.3, 1.0]) for (const [e, s] of E) {
+    const G: [CaseKey, number][] = snow ? [['D', d], ['LF', d * 0.5], ['S', d * 0.5]] : [['D', d], ['L', d * 0.5]]
+    add(`${d.toFixed(1)}(D+0.5${snow ? 'LF+0.5S' : 'L'})${sg(s)}1.4${e}`, true, [...G, [e, 1.4 * s]])
+  }
   return out
 }
 
@@ -90,5 +111,6 @@ export function gravityTotals(spec: FrameSpec, model: FrameModel) {
   const ns = model.levels.length - 1, A = model.floorArea, P = model.perimeter, l = spec.loads
   const floorD = A * (l.floorDead * (ns - 1) + l.roofDead), floorL = A * (l.floorLive * (ns - 1) + l.roofLive)
   const edge = P * (l.edgeFloor * (ns - 1) + l.edgeRoof)
-  return { floorD, floorL, edge, dlExceptSelf: floorD + edge, ll: floorL }
+  const snow = A * l.roofSnow * l.snowMu, lf = A * l.floorLive * (ns - 1)
+  return { floorD, floorL, edge, dlExceptSelf: floorD + edge, ll: floorL, snow, lf }
 }

@@ -41,7 +41,8 @@ export async function analyze(req: Request): Promise<void> {
 
 export interface Equilibrium { gen: number; app: number }
 export interface FrameAnalysis {
-  equilibrium: Record<'DL' | 'LL' | 'WX' | 'WY', Equilibrium>
+  /** 케이스 → Gen 반력 합 vs 앱 하중 합 (DL·LL·WX·WY, 적설 시 SL·LF) */
+  equilibrium: Record<string, Equilibrium>
   story: StoryTables
   /** 기둥 강축 휨이 일어나는 골조 방향 (WX 에서 Moment-y vs Moment-z 로 판별) */
   colStrongAxis: 'X' | 'Y'
@@ -54,11 +55,13 @@ export const COLLECT_CALLS = 1 + 11 + 2 + 1
 
 /** 해석 결과 회수 (층 표·고유치·평형·강축). 표 하나가 실패해도 나머지는 계속 */
 export async function collectAnalysis(req: Request, spec: FrameSpec, model: FrameModel, P: FramePayloads, log: (m: string) => void = () => {}): Promise<FrameAnalysis> {
-  const reac = await reactionSums(req, ['DL(ST)', 'LL(ST)', 'WX(ST)', 'WY(ST)'])
   const g = gravityTotals(spec, model), sw = selfWeight(model, (s) => sectionArea(s, 'CN'))
-  const equilibrium = {
+  const snow = g.snow > 0
+  const reac = await reactionSums(req, ['DL(ST)', 'LL(ST)', 'WX(ST)', 'WY(ST)', ...(snow ? ['SL(ST)', 'LF(ST)'] : [])])
+  const equilibrium: FrameAnalysis['equilibrium'] = {
     DL: { gen: reac.DL?.FZ ?? NaN, app: g.dlExceptSelf + sw }, LL: { gen: reac.LL?.FZ ?? NaN, app: g.ll },
     WX: { gen: -(reac.WX?.FX ?? NaN), app: P.wind[0].base }, WY: { gen: -(reac.WY?.FY ?? NaN), app: P.wind[1].base },
+    ...(snow ? { SL: { gen: reac.SL?.FZ ?? NaN, app: g.snow }, LF: { gen: reac.LF?.FZ ?? NaN, app: g.lf } } : {}),
   }
 
   const story: Record<string, unknown> = {}, missing: Record<string, string> = {}
