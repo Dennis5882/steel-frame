@@ -4,6 +4,7 @@
 
 ## 출처
 - 코드는 Smart MIDAS Steel v2.4.5(`E:/AI Study/smart-midas-steel`)를 복제한 것이다. 모듈 구조·규칙·라이브 확인 사항은 `docs/reference/smart-midas-steel/CLAUDE.md`를 따른다(공장 전용 내용 제외).
+- Gen MAPI 공통 주의사항(DELETE 범위·모달 정지 등): `docs/gen-api-cautions.md`.
 - 층 데이터·RS·층 검토 지표는 RC구조물 Agent(`E:/AI Study/story`)를 설계 참고한다: `docs/reference/story/MAPI_FINDINGS.md`, `_man_STOR*.json`. 코드 복사가 아니라 설계 참고.
 - 공장 앱·RC 앱의 동작은 바꾸지 않는다. 공통 모듈(기획서 3.2절)을 고치면 공장 앱에도 반영이 필요한지 기록한다.
 

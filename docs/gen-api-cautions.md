@@ -1,0 +1,86 @@
+# Gen NX MAPI 주의사항 — 앱 공통
+
+스틸구조물 Agent의 단계 0 라이브 시험(2026-10-19, Gen NX 2026 로컬, kN·m)에서 확인한 동작이다. 같은 Gen을 쓰는 공장 앱(smart-midas-steel)과 RC 앱(story)에도 해당한다.
+시험 과정과 증거는 [gate-0-report.md](gate-0-report.md)와 [scripts/gate/](../scripts/gate/)에 있다.
+
+> Gen을 업데이트한 뒤에는 4번(고유치 표)과 5번(GB50017-17 재료)을 다시 확인한다. 빌드에 따라 달라지는 항목이다.
+
+## 요약
+
+| # | 주의사항 | 심각도 | 공장 앱 | RC 앱(story) |
+| --- | --- | --- | --- | --- |
+| 1 | `DELETE` 본문의 `Assign` 번호는 무시되고 DB 전체가 지워짐 | 높음(모델 손상) | 사용 없음 | `lcom-gen`·`SSEIS` 전체 삭제 — 의도와 일치 |
+| 2 | `post/STEELCODECHECK`가 설계 결과 없이 호출되면 Gen 모달 창 → API 전체 멈춤 | 높음(세션 정지) | `scripts/live-kr.ts --gen-check`에서 사용 | 사용 없음 |
+| 3 | 해석 후 DB를 바꾸면 결과가 무효화됨 | 중간 | 확인 필요 | 확인 필요 |
+| 4 | `EIGENVALUEMODE` 표가 `Unknown Error` (이 빌드) | 높음(주기 회수 불가) | 사용 없음 | **영향 있음** — 주기·검토 지표 4곳 |
+| 5 | `GB50017-17(S)` DB 재료 PUT 전부 거부 | 중간 | CN은 `GB03(S)`라 영향 없음 | 해당 없음 |
+
+## 1. DELETE는 번호를 URL에 넣는다
+
+```
+DELETE /db/MATL  { "Assign": { "9": {} } }   → 재료 전체 삭제 (번호 무시)
+DELETE /db/MATL/9                            → 재료 9만 삭제
+```
+- MATL·ELEM에서 확인했다. story에서 확인된 `lcom-gen`과 같은 동작이다(2026-10-12).
+- 실제 사례: 시험 재료 하나를 지우려다 재료가 전부 지워졌다. 가새만 지우려던 호출로는 기둥·보까지 324개 요소가 모두 지워졌다. 이후 해석은 "Material has not been defined", "Analysis is not allowed"로 실패했다.
+- **규칙**: 일부만 지울 때는 반드시 `DELETE /db/<DB>/<id>`를 쓴다. 본문을 넣은 DELETE는 DB 전체를 비우려는 경우에만 쓴다.
+
+## 2. 모달 창을 띄우는 호출은 API를 멈춘다
+
+- `POST /post/STEELCODECHECK {Argument:{}}`를 강재 설계 결과가 없는 상태(GB50017-17처럼 API 설계가 없는 코드)에서 호출했다.
+  - HTTP는 빈 메시지로 끝난다.
+  - Gen에는 `Error Checking Result : No Load Combination exists for Checking.` 창이 남는다.
+  - 이후 모든 요청은 응답 없이 대기한다.
+- 창을 닫으면 대기 중이던 요청이 그대로 이어진다.
+- 창을 닫는 방법:
+  - 창 제목이 `midas Gen NX`인 작은 창(메인 창과 별도)이다.
+  - `PostMessage(WM_CLOSE)`로 닫혔다. `SendMessage(BM_CLICK)`와 `WM_COMMAND IDOK`는 듣지 않았다.
+  - 직접 '확인'을 눌러도 된다.
+- 기존에 알려진 같은 유형: 저장 안 된 문서로 `doc/new`나 `doc/anal`을 하면 저장 확인 창이 떠서 API가 멈춘다. 그래서 항상 `doc/saveas`를 먼저 한다.
+- **규칙**:
+  - STEELCODECHECK는 `CODE-ANAL`이 성공한 뒤에만 호출한다(공장 앱 KR `--gen-check`).
+  - CODE-ANAL이 실패하거나 시간 초과되면 STEELCODECHECK를 건너뛴다.
+  - 요청이 오래 멈추면 먼저 Gen 창 목록에서 대화상자가 떠 있는지 확인한다.
+
+## 3. 결과를 읽는 중에는 모델을 바꾸지 않는다
+
+- 해석 후 MATL 하나를 PUT·DELETE하면 모든 표가 `Cannot generate table data as there is no analysis result.`가 된다.
+- **규칙**: 결과 표는 모두 회수한 뒤에 모델을 수정한다. 수정했다면 재해석한다.
+
+## 4. `EIGENVALUEMODE` 표 (빌드 문제)
+
+- `POST /post/TABLE {TABLE_TYPE:"EIGENVALUEMODE"}`가 항상 `Unknown Error`를 낸다.
+  - 기둥 1개 + 절점질량 + Lanczos 최소 모델에서도 같다.
+  - `UNIT` 유무, 설계 코드·조합·RS·스펙트럼·층 데이터를 하나씩 빼 봐도 같다.
+- 같은 모델에서 `PARTICIPATIONVECTORMODE`(모드형상)는 정상이다. RS 해석과 층 표도 정상이다.
+- story에서는 2026-06-14부터 10-12까지 정상이었으므로 그 이후 Gen 업데이트에서 생긴 문제로 본다.
+- **영향**: story의 다음 4곳에서 T₁ 회수와 주기비·유효질량 검토가 실패한다(경고만 남고 진행).
+  - `story/src/actions/analysis.ts:210`
+  - `codes/cnReview.ts:26`
+  - `codes/krReview.ts:35`
+  - `codes/twReview.ts:31`
+- **조치**: MIDAS에 보고한다. 그동안 주기가 필요하면 다른 경로를 쓴다(모드형상 + 질량으로 앱에서 산정 등).
+
+## 5. 재료 `GB50017-17(S)`
+
+- 설치 DLL에는 규격 `GB50017-17(S)`와 DB Q235·Q355·Q390·Q420·Q460·Q345GJ가 있다.
+- 그러나 API PUT은 모든 DB가 `Unknown Error`다. Q345·Q235도 같고, `CODE` 후보 11종도 모두 실패했다.
+- 받아들여지는 것:
+  - `GB03(S)` Q235·Q345
+  - `GB12(S)` Q345
+  - `BC1:12-GB(S)`·`JTG D64-2015(S)` Q355 (기준이 달라 쓰지 않음)
+- **우회**: 사용자 정의 강재를 쓴다(아래). 강도 검토는 앱이 하므로 Gen에는 탄성 성질만 있으면 된다.
+  ```
+  { TYPE:'STEEL', NAME:'Q355', DAMP_RAT:0.02,
+    PARAM:[{ P_TYPE:2, ELAST:2.06e8, POISN:0.3, THERMAL:1.2e-5, DEN:78.5, MASS:78.5/9.806 }] }   // kN·m
+  ```
+
+## 참고: 이번에 정상으로 확인한 것 (강재 다층 골조)
+- `db/STOR` + `ope/STOR`(층 다이어프램·우발편심)
+- `FBLD` + `FBLA`(강재 보 양방향 분배, LL 반력 합 오차 0%)
+- `STYP` + `LTOM`
+- `SPFC` CH2010 네이티브 스펙트럼
+- `SPLC` XY 0°/90° + 우발편심
+- `LCOM-GEN`(ST + RS 혼합)
+- 층 표: `STORY_DRIFT_*`, `STORY_DISPLACEMENT_*`, `TORSIONAL_IRREGULARITY_*`, `STIFFNESS_IRREGULARITY_*`, `STORY_SHEAR_FORCE_COEFFICIENT`, `OVERTURNING_MOMENT`, `STORY_MASS`, `STORYWEIGHT`, `STORY_SHEAR_FORCE_RATIO`
+  - 단, RS 케이스의 `STORY_DRIFT`는 최상층 행이 빠진다.
