@@ -12,7 +12,7 @@
 | 1 | `DELETE` 본문의 `Assign` 번호는 무시되고 DB 전체가 지워짐 | 높음(모델 손상) | 사용 없음 | `lcom-gen`·`SSEIS` 전체 삭제 — 의도와 일치 |
 | 2 | `post/STEELCODECHECK`가 설계 결과 없이 호출되면 Gen 모달 창 → API 전체 멈춤 | 높음(세션 정지) | `scripts/live-kr.ts --gen-check`에서 사용 | 사용 없음 |
 | 3 | 해석 후 DB를 바꾸면 결과가 무효화됨 | 중간 | 확인 필요 | 확인 필요 |
-| 4 | `EIGENVALUEMODE` 표가 `Unknown Error` (이 빌드) | 높음(주기 회수 불가) | 사용 없음 | **영향 있음** — 주기·검토 지표 4곳 |
+| 4 | `EIGENVALUEMODE` 표가 **간헐적으로** `Unknown Error` | 중간(재시도·대체 필요) | 사용 없음 | **영향 있음** — 주기·검토 지표 4곳 |
 | 5 | `GB50017-17(S)` DB 재료 PUT 전부 거부 | 중간 | CN은 `GB03(S)`라 영향 없음 | 해당 없음 |
 
 ## 1. DELETE는 번호를 URL에 넣는다
@@ -47,19 +47,19 @@ DELETE /db/MATL/9                            → 재료 9만 삭제
 - 해석 후 MATL 하나를 PUT·DELETE하면 모든 표가 `Cannot generate table data as there is no analysis result.`가 된다.
 - **규칙**: 결과 표는 모두 회수한 뒤에 모델을 수정한다. 수정했다면 재해석한다.
 
-## 4. `EIGENVALUEMODE` 표 (빌드 문제)
+## 4. `EIGENVALUEMODE` 표 (간헐적 실패)
 
 - `POST /post/TABLE {TABLE_TYPE:"EIGENVALUEMODE"}`가 항상 `Unknown Error`를 낸다.
   - 기둥 1개 + 절점질량 + Lanczos 최소 모델에서도 같다.
   - `UNIT` 유무, 설계 코드·조합·RS·스펙트럼·층 데이터를 하나씩 빼 봐도 같다.
 - 같은 모델에서 `PARTICIPATIONVECTORMODE`(모드형상)는 정상이다. RS 해석과 층 표도 정상이다.
-- story에서는 2026-06-14부터 10-12까지 정상이었으므로 그 이후 Gen 업데이트에서 생긴 문제로 본다.
+- story에서는 2026-06-14부터 10-12까지 정상이었다. **같은 날 20:2x 예제 골조 실행에서는 정상 응답**(T1 1.0456 s, 참여질량 SUB_TABLES 포함)이 나와 빌드 고장이 아니라 간헐적 실패로 정정한다. 실패 조건은 아직 재현하지 못했다.
 - **영향**: story의 다음 4곳에서 T₁ 회수와 주기비·유효질량 검토가 실패한다(경고만 남고 진행).
   - `story/src/actions/analysis.ts:210`
   - `codes/cnReview.ts:26`
   - `codes/krReview.ts:35`
   - `codes/twReview.ts:31`
-- **조치**: MIDAS에 보고한다. 그동안 주기가 필요하면 다른 경로를 쓴다(모드형상 + 질량으로 앱에서 산정 등).
+- **조치**: 실패하면 한 번 재시도하고(`scripts/live-frame.ts`), 그래도 실패하면 주기·유효질량을 '확인 불가'로 표시한다. 재현 조건을 찾으면 MIDAS에 보고한다.
 
 ## 5. 재료 `GB50017-17(S)`
 
@@ -84,3 +84,14 @@ DELETE /db/MATL/9                            → 재료 9만 삭제
 - `LCOM-GEN`(ST + RS 혼합)
 - 층 표: `STORY_DRIFT_*`, `STORY_DISPLACEMENT_*`, `TORSIONAL_IRREGULARITY_*`, `STIFFNESS_IRREGULARITY_*`, `STORY_SHEAR_FORCE_COEFFICIENT`, `OVERTURNING_MOMENT`, `STORY_MASS`, `STORYWEIGHT`, `STORY_SHEAR_FORCE_RATIO`
   - 단, RS 케이스의 `STORY_DRIFT`는 최상층 행이 빠진다.
+
+## 6. 공장 앱 φb 식 (코드 버그, 공장 앱 해당)
+
+- GB 50017-2017 附录 C.0.1 식은 2019 勘误에서 끝항이 `εk` → **`εk²`** 로 정정됐다.
+- 공장 앱 `src/codes/cnSteel.ts` `cnCapacity()`의 φb는 `* eps`(εk)를 써서 Q345에서 φb를 과대평가한다(비보수).
+- 스틸 프레임 앱은 `src/codes/cnFrameSteel.ts` `phiBeam()`에서 εk²로 구현하고 예제 Gen 결과(0.912)로 확인했다. 공장 앱 수정은 별도 작업이다.
+
+## 7. Gen 측 MAPI 중계 502
+
+- 2026-10-19 20:24경 `moa-engineers.midasit.com` 중계가 모든 요청에 `502 Proxy Error`를 냈다(`/mapikey/verify` 포함). Gen 프로세스와 창은 정상이었다.
+- 다른 프로그램이 같은 Gen·키를 쓰는 중일 수 있으므로, 라이브 검증 전에 확인하고 그런 경우 사용자에게 먼저 묻는다(CLAUDE.md 규칙).

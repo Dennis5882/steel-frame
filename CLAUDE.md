@@ -14,6 +14,7 @@
 - 커밋 전 `npm run verify`(오프라인 회귀). 구조가 바뀌는 단계는 Gen NX 라이브로 검증.
 - 식은 테스트 안에서 원문대로 독립 재구현한다. 결과는 'OK' 단정 대신 검토 등급(`domain/status.ts`).
 - MAPI-Key·`.env*`는 커밋 금지. Gen 라이브 시험 PUT은 확인 후 DELETE로 원복.
+- 라이브 검증 전: Gen NX를 다른 프로그램이 쓰고 있는지(창 제목의 열린 문서가 `C:/temp/sf_*`가 아님, `/mapikey/verify` 실패·502, 다른 라이브 스크립트 실행 중) 확인하고, 그렇다면 사용자에게 먼저 묻는다.
 - `docs/*.docx` 예제 원본은 로컬 전용(gitignore).
 
 ## 배포
