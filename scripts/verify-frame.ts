@@ -33,7 +33,7 @@ for (const e of model.elements.filter((x) => x.role === 'brace')) {
 const g = gravityTotals(spec, model)
 ok(g.ll === 1872 && g.dlExceptSelf === 6176, 'gravity totals: LL 2·288·3 + 0.5·288; DL floors + 80 m edge')
 const P = framePayloads(spec, model)
-ok(P.combos.length === 22 && P.combos.every((c) => c.name.length <= 20), '22 combos, names ≤ 20 chars (Gen limit)')
+ok(P.combos.length === 34 && P.combos.every((c) => c.name.length <= 20), '34 combos (Gen auto set), names ≤ 20 chars (Gen limit)')
 ok(Object.keys(P.CNLD).length > 0 && Object.values(P.CNLD).every((v: any) => new Set(v.ITEMS.map((i: any) => i.LCNAME)).size === v.ITEMS.length), 'CNLD: one item per case per node')
 
 /* 화면 템플릿: 형상 생성·페이로드·단면 후보 (단면은 GB-YB05 목록 안) */
@@ -41,7 +41,7 @@ const names = new Set(frameSectionNames())
 ok(names.size > 80 && [...names].every((n) => /^H[WMN] /.test(n)), 'frame section list = GB-YB05 rolled H')
 for (const [k, tp] of Object.entries(FRAME_TEMPLATES)) {
   const m = buildFrame(tp.spec), p = framePayloads(tp.spec, m)
-  ok(m.supports.length > 0 && p.combos.length === 22, `template ${k} builds (${m.nodes.length} nodes)`)
+  ok(m.supports.length > 0 && p.combos.length === 34, `template ${k} builds (${m.nodes.length} nodes)`)
   ok(Object.values(tp.spec.sections).every((n) => names.has(n)), `template ${k} sections in GB-YB05 list`)
   ok(tp.spec.design.braced.X === tp.spec.braces.some((b) => b.axis === 'X') && tp.spec.design.braced.Y === tp.spec.braces.some((b) => b.axis === 'Y'), `template ${k}: braced flags follow brace directions`)
 }
@@ -97,6 +97,16 @@ ok(design.byRole.beam!.worst.governing === 'ltb', 'beam governed by LTB (6.2.3) 
 ok(design.byRole.column!.ratio < 1, 'columns pass')
 /* 가새: GB 50011 8.4.1 세장비 120εk = 97.6 초과 (예제 단면 HW150, λ ≈ 143) → 구조 규정 NG 로 표시되어야 함 */
 ok(design.byRole.brace!.detailRatio > 1.4, 'brace slenderness NG flagged (GB 50011 8.4.1)')
+/* Gen 예제 그림 5-12 (부재별 최대): 보 0.912 sLCB14, 기둥 0.455 sLCB20, 가새 0.689 sLCB30 — 조합 34개를 Gen 자동 생성과 같은 순서로 */
+ok(design.byRole.beam!.worst.combo === 'sLCB14' && design.byRole.brace!.worst.combo === 'sLCB30', 'governing combos match Gen (beam sLCB14, brace sLCB30)')
+{ /* 가새: Gen 은 GB 50011 8.2.6 ψ 를 적용하지 않음 → 앱 비 × ψ ≈ Gen 0.689 (ψ 독립 계산) */
+  const br = design.byRole.brace!, s = hSection(br.section), lam = br.L * 1000 / Math.min(s.ix, s.iy)
+  const psi = 1 / (1 + 0.35 * lam / Math.PI * Math.sqrt(355 / 206000))
+  near(br.ratio * psi, 0.689, 0.689 * 0.03, `brace ratio without ψ (λ ${lam.toFixed(1)}, ψ ${psi.toFixed(3)}) vs Gen 0.689`)
+  near(lam, 143.526, 0.3, 'brace λ vs Gen 143.526')
+  near(br.worst.items.find((i) => i.key === 'braceComp')!.psi ?? 0, psi, 1e-9, 'brace check exposes ψ for the no-ψ reference value') }
+/* 기둥: Gen 0.455 는 γx = γy = 1.0 에 해당, 앱은 6.1.2/8.1.1 대로 S2 단면 γ 1.05/1.20 → 약간 작음 */
+near(design.byRole.column!.ratio, 0.455, 0.455 * 0.05, 'column max ratio within 5% of Gen 0.455 (γ difference)')
 const s = fx.story
 const sx = s.shearX.find((r: any) => r.Story === '1F'), sy = s.shearY.find((r: any) => r.Story === '1F')
 near(+sx['Shear Force/X'], 515.23, 515.23 * 0.005, 'RX base shear vs tutorial')

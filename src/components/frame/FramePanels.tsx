@@ -79,12 +79,14 @@ export function StoryReviewTable({ items }: { items: StoryItem[] }) {
 
 const GOV: Record<string, I18nKey> = { strength: 'fr_gov_strength', shear: 'fr_gov_shear', ltb: 'fr_gov_ltb', stabilityX: 'fr_gov_stabx', stabilityY: 'fr_gov_staby', braceComp: 'fr_gov_bracecomp', braceTens: 'fr_gov_braceten', web: 'fr_gov_web' }
 const gov = (k: string) => GOV[k] ? t(GOV[k]) : k
+/** 가새 지진 압축이 지배할 때 ψ 미적용 비 (Gen 예제 방식, 판정에는 쓰지 않음) */
+const noPsi = (m: MemberDesign) => { const it = m.worst.items.find((i) => i.key === m.worst.governing && i.psi); return it ? it.ratio * it.psi! : null }
 
 function MemberRows({ list }: { list: MemberDesign[] }) {
   return <table><thead><tr><th>#</th><th>{t('fr_role')}</th><th>{t('fr_story')}</th><th>{t('fr_section')}</th><th>L (m)</th><th>μx / μy</th><th>{t('fr_combo')}</th><th>{t('fr_governing')}</th><th>{t('fr_ratio')}</th><th>{t('fr_detail')}</th><th /></tr></thead><tbody>
     {list.map((m) => <tr key={m.id}><td className="mono">{m.id}</td><td>{t(`fr_role_${m.role}`)}</td><td>{m.story}</td><td className="mono">{m.section}</td><td className="mono">{f(m.L, 2)}</td>
       <td className="mono">{f(m.muX, 2)} / {f(m.muY, 2)}</td><td className="mono">{m.worst.combo}</td><td>{gov(m.worst.governing)}</td>
-      <td className="mono" style={m.ratio > 1 ? { color: 'var(--red)' } : undefined}>{f(m.ratio)}</td><td className="mono" style={m.detailRatio > 1 ? { color: 'var(--red)' } : undefined}>{f(m.detailRatio)}</td><td><MemberChip m={m} /></td></tr>)}
+      <td className="mono" style={m.ratio > 1 ? { color: 'var(--red)' } : undefined}>{f(m.ratio)}{noPsi(m) !== null && <div className="pe-hint" title={t('fr_nopsi_tip')}>{t('fr_nopsi', f(noPsi(m)!))}</div>}</td><td className="mono" style={m.detailRatio > 1 ? { color: 'var(--red)' } : undefined}>{f(m.detailRatio)}</td><td><MemberChip m={m} /></td></tr>)}
   </tbody></table>
 }
 
@@ -102,7 +104,7 @@ export function FrameResultsPanel() {
       <table><thead><tr><th>{t('fr_role')}</th><th>{t('fr_count')}</th><th>{t('fr_max_ratio')}</th><th>{t('fr_detail')}</th><th>{t('fr_governing')}</th><th /></tr></thead><tbody>
         {(['beam', 'column', 'brace'] as const).map((r) => { const ms = D.members.filter((m) => m.role === r); const w = D.byRole[r]; if (!w) return null
           const det = Math.max(...ms.map((m) => m.detailRatio))
-          return <tr key={r}><td>{t(`fr_role_${r}`)}</td><td>{ms.length}</td><td className="mono" style={w.ratio > 1 ? { color: 'var(--red)' } : undefined}>{f(w.ratio)} (#{w.id})</td>
+          return <tr key={r}><td>{t(`fr_role_${r}`)}</td><td>{ms.length}</td><td className="mono" style={w.ratio > 1 ? { color: 'var(--red)' } : undefined}>{f(w.ratio)} (#{w.id}){noPsi(w) !== null && <div className="pe-hint" title={t('fr_nopsi_tip')}>{t('fr_nopsi', f(noPsi(w)!))}</div>}</td>
             <td className="mono" style={det > 1 ? { color: 'var(--red)' } : undefined}>{f(det)}</td><td>{gov(w.worst.governing)} · {w.worst.combo}</td><td><MemberChip m={w} /></td></tr> })}
       </tbody></table>
       <p className="pe-tip">{t('fr_member_note')}</p>

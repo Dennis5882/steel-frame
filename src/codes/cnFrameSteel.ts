@@ -118,7 +118,9 @@ export interface MemberInput {
   seismicGrade: 1 | 2 | 3 | 4
 }
 
-export interface CheckItem { key: string; clause: string; demand: number; capacity: number; ratio: number }
+export interface CheckItem { key: string; clause: string; demand: number; capacity: number; ratio: number
+  /** 가새 압축: 적용한 ψ (8.2.6-2). ratio × ψ = ψ 미적용 비 (Gen 예제 방식, 참고용) */
+  psi?: number }
 export interface ComboCheck { combo: string; seismic: boolean; ratio: number; governing: string; items: CheckItem[] }
 
 /** 부재 고정 성질 (조합 무관) + 구조 규정 검토 */
@@ -214,6 +216,7 @@ export function checkMember(m: MemberInput, ms: MemberStatic, combo: string, sei
       const phi = Math.min(ms.phiX, ms.phiY), lam = Math.max(ms.lambdaX, ms.lambdaY)
       const lamN = lam / Math.PI * Math.sqrt(st.fy / E), psi = seismic ? 1 / (1 + 0.35 * lamN) : 1
       if (Nc > 0) add('braceComp', seismic ? 'GB 50011 8.2.6' : 'GB 50017 7.2.1', Nc / (phi * s.A) * reB, psi * f)
+      if (Nc > 0 && psi < 1) items[items.length - 1].psi = psi
       if (Nt > 0) add('braceTens', 'GB 50017 7.1.1', Nt * 1e3 / An * reS, f)
     }
   }

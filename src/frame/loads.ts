@@ -70,20 +70,18 @@ export function frameCombos(): Combo[] {
   const out: Combo[] = []
   const add = (desc: string, seismic: boolean, terms: [CaseKey, number][]) =>
     out.push({ name: `sLCB${out.length + 1}`, desc, seismic, wind: terms.some(([k]) => k === 'WX' || k === 'WY'), terms })
+  /* Gen 「钢结构设计 自动生成」(GB 55001, 예제 그림 4-1)과 같은 34개·같은 묶음 순서: 중력 2 → 풍 단독 8 → 활 주도+풍 8 → 풍 주도+활 8 → 지진 ±8.
+     방향 순서 +WX, +WY, −WX, −WY (그림 4-1 설명 열 3~6). 고정하중 유리(1.0D) 조합을 모두 포함 */
+  const W: [CaseKey, number][] = [['WX', 1], ['WY', 1], ['WX', -1], ['WY', -1]]
+  const sg = (s: number) => (s > 0 ? '+' : '-')
   add('1.3D+1.5L', false, [['D', 1.3], ['L', 1.5]])
   add('1.0D+1.5L', false, [['D', 1.0], ['L', 1.5]])
-  for (const [w, s] of [['WX', 1], ['WX', -1], ['WY', 1], ['WY', -1]] as [CaseKey, number][]) {
-    const sg = s > 0 ? '+' : '-'
-    add(`1.3D+1.5L${sg}0.9${w}`, false, [['D', 1.3], ['L', 1.5], [w, 0.9 * s]])
-    add(`1.3D+1.05L${sg}1.5${w}`, false, [['D', 1.3], ['L', 1.05], [w, 1.5 * s]])
-    add(`1.3D${sg}1.5${w}`, false, [['D', 1.3], [w, 1.5 * s]])
-    add(`1.0D${sg}1.5${w}`, false, [['D', 1.0], [w, 1.5 * s]])
-  }
-  /* 지진: 중력대표값 G_E = D + 0.5L (질량과 같은 계수는 spec.seismic.liveMassFactor — 여기서는 조합 계수로 반영) */
-  for (const e of ['RX', 'RY'] as CaseKey[]) {
-    add(`1.3(D+0.5L)+1.4${e}`, true, [['D', 1.3], ['L', 0.65], [e, 1.4]])
-    add(`1.0(D+0.5L)+1.4${e}`, true, [['D', 1.0], ['L', 0.5], [e, 1.4]])
-  }
+  for (const d of [1.3, 1.0]) for (const [w, s] of W) add(`${d.toFixed(1)}D${sg(s)}1.5${w}`, false, [['D', d], [w, 1.5 * s]])
+  for (const d of [1.3, 1.0]) for (const [w, s] of W) add(`${d.toFixed(1)}D+1.5L${sg(s)}0.9${w}`, false, [['D', d], ['L', 1.5], [w, 0.9 * s]])
+  for (const d of [1.3, 1.0]) for (const [w, s] of W) add(`${d.toFixed(1)}D${sg(s)}1.5${w}+1.05L`, false, [['D', d], [w, 1.5 * s], ['L', 1.05]])
+  /* 지진: 중력대표값 G_E = D + 0.5L. RS 결과는 주모드 방향 부호(SPLC bADDSIGN)라 ±1.4E 를 따로 만든다 (GB 50011 5.4.1, γEh 1.4) */
+  const E: [CaseKey, number][] = [['RX', 1], ['RY', 1], ['RX', -1], ['RY', -1]]
+  for (const d of [1.3, 1.0]) for (const [e, s] of E) add(`${d.toFixed(1)}(D+0.5L)${sg(s)}1.4${e}`, true, [['D', d], ['L', d * 0.5], [e, 1.4 * s]])
   return out
 }
 

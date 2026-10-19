@@ -75,7 +75,7 @@ try {
     const m = design.byRole[role]!
     log(`${role}: max ratio ${m.ratio.toFixed(3)} (member ${m.id}, elems ${m.elements.join('+')}, story ${m.story}, ${m.worst.combo}, ${m.worst.governing}) μx ${m.muX.toFixed(3)} μy ${m.muY.toFixed(3)} detail ${m.detailRatio.toFixed(3)} class S${m.st.cls}`)
   }
-  log('target: beam 0.912 · column ~0.69 · brace ~0.45 (Gen GB50017-17, 抗震二级)')
+  log('target (Gen fig 5-12): beam 0.912 sLCB14 · column 0.455 sLCB20 · brace 0.689 sLCB30 (no ψ)')
   evidence.design = design.members.map((m) => ({ id: m.id, role: m.role, story: m.story, elements: m.elements, L: m.L, muX: m.muX, muY: m.muY, ratio: m.ratio, combo: m.worst.combo, governing: m.worst.governing, detail: m.detailRatio, items: m.worst.items }))
   evidence.model = `C:/temp/sf_frame_${stamp}.mgbx`
 } finally {

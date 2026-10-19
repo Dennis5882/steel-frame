@@ -58,6 +58,7 @@ export const frameEn = {
   fl_tables_missing: (tables: string) => `Some Gen tables could not be read (${tables}); the related storey checks show "not available".`,
   fl_design_start: 'Reading member forces and running the checks…',
   fl_design_done: (m: number, ng: number) => `Checked ${m} members — ${ng} exceed a limit.`,
+  fr_nopsi: (v: string) => `without ψ: ${v}`, fr_nopsi_tip: 'Reference only: the ratio without the GB 50011 8.2.6 cyclic reduction ψ, as in the Gen NX example. The check uses ψ.',
   fr_restore_done: (path: string) => `Reopened the previous model: <b>${path}</b>. The app's model and results were cleared.`,
 }
 
@@ -122,6 +123,7 @@ export const frameKo: FrameDict = {
   fl_tables_missing: (tables) => `일부 Gen 표를 읽지 못했습니다(${tables}). 관련 층 검토는 "확인 불가"로 표시됩니다.`,
   fl_design_start: '부재력을 읽고 검토하는 중…',
   fl_design_done: (m, ng) => `${m}개 부재 검토 — 한계 초과 ${ng}개.`,
+  fr_nopsi: (v) => `ψ 미적용: ${v}`, fr_nopsi_tip: '참고값: GB 50011 8.2.6 반복하중 저감 ψ를 빼고 계산한 비입니다(Gen NX 예제 방식). 판정은 ψ를 적용한 값으로 합니다.',
   fr_restore_done: (path) => `이전 모델을 다시 열었습니다: <b>${path}</b>. 앱의 모델과 결과는 비웠습니다.`,
 }
 
@@ -184,6 +186,7 @@ export const frameZhCN: FrameDict = {
   fl_tables_missing: (tables) => `部分 Gen 表格未能读取（${tables}），相关楼层验算显示为"无法确认"。`,
   fl_design_start: '正在读取构件内力并验算…',
   fl_design_done: (m, ng) => `已验算 ${m} 个构件 — ${ng} 个超限。`,
+  fr_nopsi: (v) => `不计 ψ：${v}`, fr_nopsi_tip: '仅供参考：不计 GB 50011 8.2.6 强度降低系数 ψ 的应力比（与 Gen NX 例题相同）。判定采用计入 ψ 的结果。',
   fr_restore_done: (path) => `已重新打开前一模型：<b>${path}</b>。本程序的模型与结果已清除。`,
 }
 
@@ -246,5 +249,6 @@ export const frameZhTW: FrameDict = {
   fl_tables_missing: (tables) => `部分 Gen 表格無法讀取（${tables}），相關樓層檢核顯示為「無法確認」。`,
   fl_design_start: '正在讀取構件內力並檢核…',
   fl_design_done: (m, ng) => `已檢核 ${m} 個構件 — ${ng} 個超限。`,
+  fr_nopsi: (v) => `不計 ψ：${v}`, fr_nopsi_tip: '僅供參考：不計 GB 50011 8.2.6 強度折減係數 ψ 的應力比（與 Gen NX 例題相同）。判定採用計入 ψ 的結果。',
   fr_restore_done: (path) => `已重新開啟前一模型：<b>${path}</b>。本程式的模型與結果已清除。`,
 }

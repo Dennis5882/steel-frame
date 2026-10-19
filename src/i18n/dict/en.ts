@@ -540,6 +540,8 @@ export const en = {
   g_help_2: 'Release notes',
   g_help_2_cmd: 'release notes',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_1_1_1: 'Load combinations now match the Gen NX automatic steel set (34): factored dead load 1.0 with live and wind, and ±1.4E for response spectrum cases. Governing combinations of the tutorial beam and brace now match Gen.',
+  rn_v1_1_1_2: 'Brace results also show the ratio without the GB 50011 8.2.6 reduction ψ for comparison with Gen NX; the check itself still applies ψ and the 8.4.1 slenderness limit.',
   rn_v1_1_0_1: 'The modelling workflow is now for multi-storey steel frames: grid, storeys, material and sections, chevron bracing, floor loads, wind and seismic, then a final check. Three templates: the Gen NX L-shaped braced frame example, a regular braced frame and a moment frame.',
   rn_v1_1_0_2: 'Analysis runs static, eigen and response-spectrum cases in Gen NX and reads back periods, effective mass, storey tables and an equilibrium check. Design checks cover storey drift, irregularity, shear-weight ratio and P-Δ, plus GB 50017 checks for every beam, column and brace.',
   rn_v1_1_0_3: 'Columns in unbraced directions now use the sway effective length factor (GB 50017 E.0.2). Check results can be exported as CSV; section optimisation and the calculation report follow in the next version.',
