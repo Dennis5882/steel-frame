@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- 제목·설명·og 메타는 빌드 시 사전 meta_title/meta_desc 로 채움 (vite.config.ts langPages — 루트 = ko, /en/ /zh-TW/ /zh-CN/ /ko/) -->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/fonts/ui-fonts.css">
+<!--meta--><title>스틸구조물 Agent</title><!--/meta-->
+<!-- 테마를 첫 페인트 전에 적용(깜빡임 방지) — 값 목록은 store.ts THEMES 와 같게 -->
+<script>try{var t=localStorage.getItem('sms_theme');document.documentElement.dataset.theme=/^(navy|light|cyber)$/.test(t)?t:'light'}catch(e){document.documentElement.dataset.theme='light'}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div id="root"></div>
+<script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

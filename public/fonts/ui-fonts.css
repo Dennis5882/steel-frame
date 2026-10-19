@@ -1,0 +1,20 @@
+/* Shared by the app and exported HTML reports; Pretendard is self-hosted. */
+@import url('./pretendard/pretendardvariable-dynamic-subset.css');
+
+:root {
+  --font-ui: 'IBM Plex Sans', 'Noto Sans KR', 'Noto Sans TC', 'Noto Sans SC', sans-serif;
+  --font-cjk: 'Noto Sans KR', 'Noto Sans TC', 'Noto Sans SC';
+  --font-mono: 'IBM Plex Mono', var(--font-cjk), monospace;
+}
+:root:lang(ko) {
+  --font-ui: 'Pretendard Variable', 'Noto Sans KR', sans-serif;
+  --font-cjk: 'Pretendard Variable', 'Noto Sans KR', 'Noto Sans TC', 'Noto Sans SC';
+}
+:root:lang(zh-Hant) {
+  --font-ui: 'Noto Sans TC', 'IBM Plex Sans', sans-serif;
+  --font-cjk: 'Noto Sans TC', 'Noto Sans KR', 'Noto Sans SC';
+}
+:root:lang(zh-Hans) {
+  --font-ui: 'Microsoft YaHei UI', 'Microsoft YaHei', '微软雅黑', 'Noto Sans SC', sans-serif;
+  --font-cjk: 'Microsoft YaHei UI', 'Microsoft YaHei', '微软雅黑', 'Noto Sans SC', 'Noto Sans TC';
+}
