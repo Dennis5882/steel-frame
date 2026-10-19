@@ -889,3 +889,18 @@ td.pos{color:var(--green)} td.neg{color:var(--red)}
 .repair-table th{font-weight:500;color:var(--muted)}
 .repair-table td[data-fail="true"]{color:var(--red)}
 @media(max-width:640px){.repair-panel{padding:12px}.repair-group,.repair-preview,.repair-comparison{padding:12px}.repair-heading h3{font-size:.9rem}.repair-steps{gap:6px}}
+
+/* 다층 강골조 화면 (components/frame/*) */
+.model-wizard .mw-steps{grid-template-columns:repeat(8,minmax(0,1fr))}
+.fr-plan svg{max-height:210px}
+.fr-row{grid-template-columns:repeat(4,minmax(0,1fr)) auto;align-items:end;margin-bottom:8px}
+.fr-del{padding:6px 8px}
+.fr-check{flex-direction:row;align-items:center;gap:8px}
+.fr-table{width:100%;border-collapse:collapse;font-size:.8rem;margin-bottom:10px}
+.fr-table th,.fr-table td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle}
+.fr-table th{color:var(--muted);font-weight:600;white-space:nowrap}
+.fr-table input{width:100%;min-width:0;background:var(--bg);border:1px solid var(--border);color:var(--txt);border-radius:6px;padding:5px 7px;font:inherit}
+.fr-table input[inputmode="decimal"]{font-family:var(--font-mono)}
+.fr-review td:last-child{width:1%}.fr-review .btn{white-space:nowrap}
+.pe-hint{color:var(--muted);font-size:.7rem}
+@container(max-width:420px){.fr-row{grid-template-columns:repeat(2,minmax(0,1fr)) auto}}

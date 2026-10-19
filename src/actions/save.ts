@@ -16,7 +16,7 @@ function stamp(): string {
 export function autoSavePath(tag: string): string {
   let dir = S.saveDir.trim().split('\\').join('/')
   while (dir.endsWith('/')) dir = dir.slice(0, -1)
-  return `${dir || 'C:/temp'}/sms_${tag}_${stamp()}.mgbx`
+  return `${dir || 'C:/temp'}/sf_${tag}_${stamp()}.mgbx`
 }
 
 /** 저장한 경로를 돌려준다 (Gen PC 기준) */

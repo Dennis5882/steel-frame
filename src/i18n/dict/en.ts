@@ -1,6 +1,7 @@
 import { addEn } from './additions'
 import { repairEn } from './repair'
 import { sectionEn } from './sectionPicker'
+import { frameEn } from './frame'
 import { flowEn } from './modelingFlow'
 /* 영어 사전 — 키의 기준(폴백). 다른 언어는 `Dict` 타입으로 키 일치를 컴파일 시점에 검사.
    값이 HTML 인 키(…_html, welcome, 메시지류)는 dangerouslySetInnerHTML 로 렌더 — 사용자 입력을 넣지 말 것. */
@@ -9,6 +10,7 @@ export const en = {
   ...repairEn,
   ...sectionEn,
   ...flowEn,
+  ...frameEn,
   bay_mode: 'Spacing mode',
   numeric_wheel_hint: 'Click to focus, then use the wheel or ↑↓ keys to adjust.',
   bay_error: 'Enter a number greater than zero for every bay spacing.',
@@ -538,6 +540,9 @@ export const en = {
   g_help_2: 'Release notes',
   g_help_2_cmd: 'release notes',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_1_0_1: 'The modelling workflow is now for multi-storey steel frames: grid, storeys, material and sections, chevron bracing, floor loads, wind and seismic, then a final check. Three templates: the Gen NX L-shaped braced frame example, a regular braced frame and a moment frame.',
+  rn_v1_1_0_2: 'Analysis runs static, eigen and response-spectrum cases in Gen NX and reads back periods, effective mass, storey tables and an equilibrium check. Design checks cover storey drift, irregularity, shear-weight ratio and P-Δ, plus GB 50017 checks for every beam, column and brace.',
+  rn_v1_1_0_3: 'Columns in unbraced directions now use the sway effective length factor (GB 50017 E.0.2). Check results can be exported as CSV; section optimisation and the calculation report follow in the next version.',
   rn_v1_0_0_1: 'First release of Steel Frame Agent, forked from Smart MIDAS Steel v2.4.5 as the shell for multi-storey steel frames.',
   project_code_existing: 'Existing project uses another code',
   project_code_existing_hint: 'The existing project keeps its code. Select GB 51022 to start modeling here, or resume editing the existing project.',
@@ -775,10 +780,10 @@ export const en = {
   sa_react: 'Collect reactions',
   cfm_skip: 'Don\'t ask again this session',
   cfm_build_title: 'Replace the Gen NX model',
-  cfm_build_body: (dir: string) => `The document open in Gen NX will be closed and a new model created.<br>It is first saved to <b>${dir}/sms_backup_<time>.mgbx</b>; after creation you can go back with [Restore previous model].`,
+  cfm_build_body: (dir: string) => `The document open in Gen NX will be closed and a new model created.<br>It is first saved to <b>${dir}/sf_backup_<time>.mgbx</b>; after creation you can go back with [Restore previous model].`,
   cfm_build_ok: 'Back up and create',
   cfm_restore_title: 'Restore previous model',
-  cfm_restore_body: (path: string) => `<b>${path}</b> will be reopened in Gen NX.<br>The current Gen model is saved as sms_model_* first, and the app\'s model and results are cleared.`,
+  cfm_restore_body: (path: string) => `<b>${path}</b> will be reopened in Gen NX.<br>The current Gen model is saved as sf_model_* first, and the app\'s model and results are cleared.`,
   cfm_restore_ok: 'Restore',
   wf_restore: 'Restore previous model',
   st_restore: 'Restoring previous model',

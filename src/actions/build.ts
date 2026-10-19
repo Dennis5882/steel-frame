@@ -47,7 +47,7 @@ export async function buildFactory(spec: FactorySpec): Promise<void> {
   }
 }
 
-/** [이전 모델로 복원] — 마지막 [공장 생성] 직전 백업을 Gen 에서 다시 연다 (현재 문서는 sms_model_* 로 먼저 저장). 앱의 모델·결과는 비운다 */
+/** [이전 모델로 복원] — 마지막 [공장 생성] 직전 백업을 Gen 에서 다시 연다 (현재 문서는 sf_model_* 로 먼저 저장). 앱의 모델·결과는 비운다 */
 export async function restoreBackup(): Promise<void> {
   const path = S.restorePoint
   if (!path || S.busy) return

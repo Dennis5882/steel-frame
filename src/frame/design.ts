@@ -1,9 +1,9 @@
 /* 다층 강골조 부재 검토 실행 (순수) — 요소력 → 설계 부재 → GB 50017/50011 검토 (codes/cnFrameSteel.ts).
    - 보: 분할된 요소를 원래 보 하나로 합침 (Gen 「指定构件 自动」과 같은 취지). 가새 꼭짓점이 있는 보는 GB 50011 8.4.2-3 에 따라
      그 점을 횡지지점으로 보고 l1 = L/2, βb = 表C.0.1 항5.
-   - 기둥: μ = 附录 E.0.1 (无侧移, 예제 설정), K = Σ(Ib/lb)/Σ(Ic/lc), 고정 기초 K2 = 10. 강축이 받는 보 방향은 colStrongAxis.
+   - 기둥: μ = 附录 E.0.1 (无侧移, 가새 방향·예제 설정) 또는 E.0.2 (有侧移, 가새 없는 방향), K = Σ(Ib/lb)/Σ(Ic/lc), 고정 기초 K2 = 10. 강축이 받는 보 방향은 colStrongAxis.
    - 가새: 양단 μ = 1 (부재 길이). */
-import { checkMember, memberStatic, type ComboCheck, type HSection, type MemberInput, type MemberStatic, type Station, muNoSway } from '../codes/cnFrameSteel'
+import { checkMember, memberStatic, type ComboCheck, type HSection, type MemberInput, type MemberStatic, type Station, muNoSway, muSway } from '../codes/cnFrameSteel'
 import { genSectionRecord, sectionProps } from '../domain/sections'
 import { elementLength } from './geometry'
 import type { ElementForces } from './results'
@@ -54,8 +54,8 @@ export function designMembers(spec: FrameSpec, model: FrameModel, colStrongAxis:
       const kx: [number, number] = [K(top, colStrongAxis, true), K(bot, colStrongAxis, true)]
       const ky: [number, number] = [K(top, weakAxis, false), K(bot, weakAxis, false)]
       m.K = { x: kx, y: ky }
-      m.muX = spec.design.braced[colStrongAxis] ? muNoSway(...kx) : 1
-      m.muY = spec.design.braced[weakAxis] ? muNoSway(...ky) : 1
+      m.muX = spec.design.braced[colStrongAxis] ? muNoSway(...kx) : muSway(...kx)
+      m.muY = spec.design.braced[weakAxis] ? muNoSway(...ky) : muSway(...ky)
     }
     out.push(m)
   }

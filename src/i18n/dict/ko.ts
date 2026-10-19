@@ -1,6 +1,7 @@
 import { addKo } from './additions'
 import { repairKo } from './repair'
 import { sectionKo } from './sectionPicker'
+import { frameKo } from './frame'
 import { flowKo } from './modelingFlow'
 import type { Dict } from './en'
 
@@ -9,6 +10,7 @@ export const ko: Dict = {
   ...repairKo,
   ...sectionKo,
   ...flowKo,
+  ...frameKo,
   bay_mode: '기둥 간격 입력 방식',
   numeric_wheel_hint: '클릭 후 휠 또는 ↑↓ 키로 값을 조절합니다.',
   bay_error: '모든 베이 간격에 0보다 큰 숫자를 입력하세요.',
@@ -526,6 +528,9 @@ export const ko: Dict = {
   g_help_2: '릴리즈 노트',
   g_help_2_cmd: '릴리즈 노트',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_1_0_1: '모델링 흐름을 다층 강골조용으로 바꿨습니다: 격자, 층, 재료·단면, 人자형 가새, 바닥 하중, 풍·지진, 최종 확인. 템플릿은 Gen NX L자 가새골조 예제, 정형 가새골조, 모멘트골조 세 가지입니다.',
+  rn_v1_1_0_2: '해석은 Gen NX에서 정적·고유치·응답스펙트럼을 돌리고 주기, 유효질량, 층 표, 평형 확인을 가져옵니다. 설계 검토는 층간변위·비정형·전단중량비·P-Δ 층 검토와 모든 보·기둥·가새의 GB 50017 부재 검토입니다.',
+  rn_v1_1_0_3: '가새가 없는 방향의 기둥은 유측이동 계산길이계수(GB 50017 E.0.2)를 씁니다. 검토 결과는 CSV로 내보낼 수 있고, 단면 최적화와 계산서는 다음 버전에 추가됩니다.',
   rn_v1_0_0_1: '스틸구조물 Agent 첫 버전입니다. Smart MIDAS Steel v2.4.5를 바탕으로 다층 강골조용 셸을 만들었습니다.',
   project_code_existing: '기존 프로젝트는 다른 규범 사용 중',
   project_code_existing_hint: '기존 프로젝트의 기준은 유지됩니다. 이 화면에서 모델링을 시작하려면 GB 51022를 선택하세요. 기존 프로젝트는 계속 편집할 수 있습니다.',
@@ -757,10 +762,10 @@ export const ko: Dict = {
   sa_react: '반력 수집',
   cfm_skip: '이번 세션에서 다시 묻지 않기',
   cfm_build_title: 'Gen NX 모델을 교체합니다',
-  cfm_build_body: (dir) => `Gen NX 에 열린 문서를 닫고 새 모델을 만듭니다.<br>열린 문서는 먼저 <b>${dir}/sms_backup_<시각>.mgbx</b> 로 자동 저장되며, 생성 후 [이전 모델로 복원] 으로 되돌릴 수 있습니다.`,
+  cfm_build_body: (dir) => `Gen NX 에 열린 문서를 닫고 새 모델을 만듭니다.<br>열린 문서는 먼저 <b>${dir}/sf_backup_<시각>.mgbx</b> 로 자동 저장되며, 생성 후 [이전 모델로 복원] 으로 되돌릴 수 있습니다.`,
   cfm_build_ok: '백업하고 생성',
   cfm_restore_title: '이전 모델로 복원',
-  cfm_restore_body: (path) => `Gen NX 에서 <b>${path}</b> 를 다시 엽니다.<br>지금 Gen 의 모델은 먼저 sms_model_* 로 저장되고, 앱의 모델·해석·검토 결과는 비워집니다.`,
+  cfm_restore_body: (path) => `Gen NX 에서 <b>${path}</b> 를 다시 엽니다.<br>지금 Gen 의 모델은 먼저 sf_model_* 로 저장되고, 앱의 모델·해석·검토 결과는 비워집니다.`,
   cfm_restore_ok: '복원',
   wf_restore: '이전 모델로 복원',
   st_restore: '이전 모델 복원',

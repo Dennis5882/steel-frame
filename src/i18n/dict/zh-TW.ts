@@ -1,6 +1,7 @@
 import { addTW } from './additions'
 import { repairTW } from './repair'
 import { sectionTw } from './sectionPicker'
+import { frameZhTW } from './frame'
 import { flowTW } from './modelingFlow'
 import type { Dict } from './en'
 
@@ -10,6 +11,7 @@ export const zhTW: Dict = {
   ...repairTW,
   ...sectionTw,
   ...flowTW,
+  ...frameZhTW,
   bay_mode: '柱距輸入方式',
   numeric_wheel_hint: '點選後可用滾輪或 ↑↓ 鍵調整數值。',
   bay_error: '請為每一跨間距輸入大於零的數值。',
@@ -524,6 +526,9 @@ export const zhTW: Dict = {
   g_help_2: '版本說明',
   g_help_2_cmd: '版本說明',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_1_0_1: '建模流程改為多層鋼構架：格線、樓層、材料與斷面、人字形斜撐、樓板載重、風與地震、最終確認。提供三個範本：Gen NX L 形斜撐構架例題、規則斜撐構架與抗彎構架。',
+  rn_v1_1_0_2: '分析於 Gen NX 執行靜力、特徵值與反應譜，並讀取週期、有效質量、樓層表格與平衡檢查。設計檢核包含層間變位角、不規則、剪重比、P-Δ 樓層檢核，以及所有梁、柱、斜撐的 GB 50017 構件檢核。',
+  rn_v1_1_0_3: '無斜撐方向的柱採用有側移計算長度係數（GB 50017 E.0.2）。檢核結果可匯出為 CSV；斷面最佳化與計算書將於下一版本提供。',
   rn_v1_0_0_1: '鋼框架 Agent 首個版本，以 Smart MIDAS Steel v2.4.5 為基礎建立多層鋼框架應用框架。',
   project_code_existing: '現有專案使用其他規範',
   project_code_existing_hint: '現有專案的規範保持不變。請選擇 GB 51022 後開始建模，或繼續編輯現有專案。',
@@ -755,10 +760,10 @@ export const zhTW: Dict = {
   sa_react: '擷取反力',
   cfm_skip: '本次工作階段不再詢問',
   cfm_build_title: '將取代 Gen NX 模型',
-  cfm_build_body: (dir) => `將關閉 Gen NX 中開啟的文件並建立新模型。<br>開啟的文件會先自動儲存為 <b>${dir}/sms_backup_<時間>.mgbx</b>，建立後可用［復原前一模型］還原。`,
+  cfm_build_body: (dir) => `將關閉 Gen NX 中開啟的文件並建立新模型。<br>開啟的文件會先自動儲存為 <b>${dir}/sf_backup_<時間>.mgbx</b>，建立後可用［復原前一模型］還原。`,
   cfm_build_ok: '備份並建立',
   cfm_restore_title: '復原前一模型',
-  cfm_restore_body: (path) => `將在 Gen NX 重新開啟 <b>${path}</b>。<br>目前 Gen 模型會先儲存為 sms_model_*，本程式的模型與結果將清除。`,
+  cfm_restore_body: (path) => `將在 Gen NX 重新開啟 <b>${path}</b>。<br>目前 Gen 模型會先儲存為 sf_model_*，本程式的模型與結果將清除。`,
   cfm_restore_ok: '復原',
   wf_restore: '復原前一模型',
   st_restore: '復原前一模型',

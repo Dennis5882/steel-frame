@@ -99,7 +99,7 @@ assert.equal(S.draftSpec!.material, defaultSpecFor('TW').material)
 assert.equal(S.draftSpec!.span, 28)
 /* 작업 초기화: 취소·작업 중은 그대로, 확인하면 앱 작업 상태만 비우고 연결·기준은 유지 */
 const { resetWorkspace } = await import('../src/agent/session')
-S.mapiKey = 'test-only'; S.baseUrl = 'https://example.invalid/gen'; S.restorePoint = 'C:/temp/sms_backup.mgbx'
+S.mapiKey = 'test-only'; S.baseUrl = 'https://example.invalid/gen'; S.restorePoint = 'C:/temp/sf_backup.mgbx'
 S.log.push({ id: -1, ts: '', type: 'api', html: 'x' })
 setConfirmHandler(() => false)
 await resetWorkspace()
@@ -111,7 +111,7 @@ assert.equal(S.built, builtBefore, 'a running job cannot be reset')
 S.busy = false
 await resetWorkspace()
 assert.ok(!S.built && !S.analyzed && !S.design && !S.connections && !S.draftSpec && !S.activePlan, 'reset clears inputs, model and results')
-assert.equal(S.restorePoint, 'C:/temp/sms_backup.mgbx', 'reset keeps the Gen backup so the replaced model can still be restored')
+assert.equal(S.restorePoint, 'C:/temp/sf_backup.mgbx', 'reset keeps the Gen backup so the replaced model can still be restored')
 assert.equal(S.workspaceView, 'start'); assert.equal(S.task, 'model')
 assert.equal(S.log.length, 0, 'reset clears the API log')
 assert.equal(S.activity.length, 1, 'only the reset notice remains in history')

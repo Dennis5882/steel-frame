@@ -1,6 +1,7 @@
 import { addCN } from './additions'
 import { repairCN } from './repair'
 import { sectionCn } from './sectionPicker'
+import { frameZhCN } from './frame'
 import { flowCN } from './modelingFlow'
 import type { Dict } from './en'
 
@@ -10,6 +11,7 @@ export const zhCN: Dict = {
   ...repairCN,
   ...sectionCn,
   ...flowCN,
+  ...frameZhCN,
   bay_mode: '柱距输入方式',
   numeric_wheel_hint: '点击后可用滚轮或 ↑↓ 键调整数值。',
   bay_error: '请为每一跨间距输入大于零的数值。',
@@ -524,6 +526,9 @@ export const zhCN: Dict = {
   g_help_2: '版本说明',
   g_help_2_cmd: '版本说明',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_1_0_1: '建模流程改为多层钢框架：轴网、楼层、材料与截面、人字形支撑、楼面荷载、风与地震、最终确认。提供三个模板：Gen NX L 形支撑框架例题、规则支撑框架和纯框架。',
+  rn_v1_1_0_2: '分析在 Gen NX 中运行静力、特征值和反应谱，并读取周期、有效质量、楼层表格和平衡校核。设计验算包括层间位移角、不规则、剪重比、P-Δ 楼层验算，以及全部梁、柱、支撑的 GB 50017 构件验算。',
+  rn_v1_1_0_3: '无支撑方向的柱采用有侧移计算长度系数（GB 50017 E.0.2）。验算结果可导出为 CSV；截面优化和计算书将在下一版本提供。',
   rn_v1_0_0_1: '钢框架 Agent 首个版本，基于 Smart MIDAS Steel v2.4.5 建立多层钢框架应用框架。',
   project_code_existing: '现有项目使用其他规范',
   project_code_existing_hint: '现有项目的规范保持不变。请选择 GB 51022 后开始建模，或继续编辑现有项目。',
@@ -755,10 +760,10 @@ export const zhCN: Dict = {
   sa_react: '读取反力',
   cfm_skip: '本次会话不再询问',
   cfm_build_title: '将替换 Gen NX 模型',
-  cfm_build_body: (dir) => `将关闭 Gen NX 中打开的文件并创建新模型。<br>打开的文件会先自动保存为 <b>${dir}/sms_backup_<时间>.mgbx</b>，创建后可用［恢复前一模型］还原。`,
+  cfm_build_body: (dir) => `将关闭 Gen NX 中打开的文件并创建新模型。<br>打开的文件会先自动保存为 <b>${dir}/sf_backup_<时间>.mgbx</b>，创建后可用［恢复前一模型］还原。`,
   cfm_build_ok: '备份并创建',
   cfm_restore_title: '恢复前一模型',
-  cfm_restore_body: (path) => `将在 Gen NX 重新打开 <b>${path}</b>。<br>当前 Gen 模型会先保存为 sms_model_*，本程序的模型与结果将清除。`,
+  cfm_restore_body: (path) => `将在 Gen NX 重新打开 <b>${path}</b>。<br>当前 Gen 模型会先保存为 sf_model_*，本程序的模型与结果将清除。`,
   cfm_restore_ok: '恢复',
   wf_restore: '恢复前一模型',
   st_restore: '恢复前一模型',

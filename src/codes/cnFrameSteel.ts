@@ -69,6 +69,16 @@ export function muNoSway(K1: number, K2: number): number {
   return (lo + hi) / 2
 }
 
+/** 附录 E.0.2 有侧移框架柱 μ — [36K1K2 − (π/μ)²]·sin(π/μ) + 6(K1+K2)(π/μ)·cos(π/μ) = 0 을 u = π/μ ∈ (0, π) 에서 이분법. K1 = K2 = 0 → ∞ */
+export function muSway(K1: number, K2: number): number {
+  const k1 = Math.min(Math.max(K1, 0), 1e6), k2 = Math.min(Math.max(K2, 0), 1e6)
+  if (k1 + k2 < 1e-9) return Infinity
+  const f = (u: number) => (36 * k1 * k2 - u * u) * Math.sin(u) + 6 * (k1 + k2) * u * Math.cos(u)
+  let lo = 1e-9, hi = Math.PI
+  for (let i = 0; i < 100; i++) { const m = (lo + hi) / 2; if (f(lo) * f(m) <= 0) hi = m; else lo = m }
+  return Math.PI / ((lo + hi) / 2)
+}
+
 /** 附录 C.0.1 (2019 勘误 εk²) — 이축대칭 압연 H, βb = 表C.0.1. φb > 0.6 → 1.07 − 0.282/φb ≤ 1 */
 export function phiBeam(s: HSection, l1: number, fy: number, betaB: number): number {
   const ly = l1 / s.iy, e = epsK(fy)

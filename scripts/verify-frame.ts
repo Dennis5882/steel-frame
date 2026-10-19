@@ -8,11 +8,13 @@ import { gunzipSync } from 'node:zlib'
 import { buildFrame } from '../src/frame/geometry'
 import { TUTORIAL_SPEC } from '../src/frame/tutorial'
 import { betaZ, frameCombos, gravityTotals, tgOf, windLoads } from '../src/frame/loads'
-import { cnFrameStrength, flangeRatio, muNoSway, phiBeam, webRatio } from '../src/codes/cnFrameSteel'
+import { cnFrameStrength, flangeRatio, muNoSway, muSway, phiBeam, webRatio } from '../src/codes/cnFrameSteel'
 import { designMembers, hSection, runFrameDesign } from '../src/frame/design'
 import { storyReview } from '../src/frame/story'
 import { framePayloads } from '../src/frame/gen'
 import type { ElementForces } from '../src/frame/results'
+import { FRAME_TEMPLATES } from '../src/frame/templates'
+import { frameSectionNames } from '../src/frame/sections'
 
 let checks = 0
 const ok = (cond: unknown, msg: string) => { assert.ok(cond, msg); checks++ }
@@ -34,9 +36,24 @@ const P = framePayloads(spec, model)
 ok(P.combos.length === 22 && P.combos.every((c) => c.name.length <= 20), '22 combos, names ≤ 20 chars (Gen limit)')
 ok(Object.keys(P.CNLD).length > 0 && Object.values(P.CNLD).every((v: any) => new Set(v.ITEMS.map((i: any) => i.LCNAME)).size === v.ITEMS.length), 'CNLD: one item per case per node')
 
+/* 화면 템플릿: 형상 생성·페이로드·단면 후보 (단면은 GB-YB05 목록 안) */
+const names = new Set(frameSectionNames())
+ok(names.size > 80 && [...names].every((n) => /^H[WMN] /.test(n)), 'frame section list = GB-YB05 rolled H')
+for (const [k, tp] of Object.entries(FRAME_TEMPLATES)) {
+  const m = buildFrame(tp.spec), p = framePayloads(tp.spec, m)
+  ok(m.supports.length > 0 && p.combos.length === 22, `template ${k} builds (${m.nodes.length} nodes)`)
+  ok(Object.values(tp.spec.sections).every((n) => names.has(n)), `template ${k} sections in GB-YB05 list`)
+  ok(tp.spec.design.braced.X === tp.spec.braces.some((b) => b.axis === 'X') && tp.spec.design.braced.Y === tp.spec.braces.some((b) => b.axis === 'Y'), `template ${k}: braced flags follow brace directions`)
+}
+{ const mt = FRAME_TEMPLATES.moment.spec, cols = designMembers(mt, buildFrame(mt)).filter((x) => x.role === 'column')
+  ok(cols.every((c) => c.muX >= 1 && c.muY >= 1), 'moment frame columns use sway μ ≥ 1 (E.0.2)') }
+
 /* 2) 원문 대조 */
 const E01: [number, number, number][] = [[0, 0, 1], [0.05, 0, 0.99], [1, 1, 0.774], [0.5, 10, 0.685], [2, 3, 0.663], [10, 10, 0.549], [0.3, 0.2, 0.916]]
 for (const [k1, k2, mu] of E01) near(muNoSway(k1, k2), mu, 0.0015, `GB 50017 表E.0.1 μ(K1=${k1},K2=${k2})`)
+const E02: [number, number, number][] = [[0, 0.05, 6.02], [0, 10, 2.03], [0.05, 0.05, 4.16], [0.5, 0.5, 1.59], [1, 1, 1.32], [1, 10, 1.17], [2, 0.2, 1.60], [10, 10, 1.03], [3, 5, 1.09]]
+for (const [k1, k2, mu] of E02) near(muSway(k1, k2), mu, 0.006, `GB 50017 表E.0.2 μ(K1=${k1},K2=${k2})`)
+ok(muSway(0, 0) === Infinity, '表E.0.2 K1 = K2 = 0 → ∞')
 const q = cnFrameStrength('Q355B', 12), q2 = cnFrameStrength('Q355B', 20)
 ok(q.f === 305 && q.fv === 175 && q.fy === 355 && q2.f === 295 && q2.fy === 345, 'GB 50017 表4.4.1 Q355 (2019 勘误)')
 const beam = hSection('HW 200x200x8/12')

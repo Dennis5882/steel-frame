@@ -103,7 +103,7 @@ try {
         await step('LENG', () => mapi('POST', `${D}/LENG`, { Assign: Object.fromEntries([...lens].map(([id, l]) => [id, { LY: l.KLx / 1000, LZ: l.KLy / 1000, LB: l.Lb / 1000 }])) }, 'KDS lengths'))
       }
       /* 설계 코드 지정 후 CODE-ANAL 이 'Please perform analysis.'(라이브 2026-10-16) → 같은 모델 재해석. analyzeCore 는 앱 결과를 비우므로 쓰지 않음 */
-      /* 해석 전 항상 자동 저장 (C:/temp/sms_model_*.mgbx) — 저장 안 된 변경으로 doc/anal 하면 Gen 이 저장 위치를 묻는 창을 띄움 (사용자 요청 2026-10-16) */
+      /* 해석 전 항상 자동 저장 (C:/temp/sf_model_*.mgbx) — 저장 안 된 변경으로 doc/anal 하면 Gen 이 저장 위치를 묻는 창을 띄움 (사용자 요청 2026-10-16) */
       const { autoSave } = await import('../src/actions/save')
       console.log('Gen autosave:', await autoSave('model'))
       console.log('Gen reanalysis:', JSON.stringify(await mapi('POST', '/doc/anal', {}, 'reanalysis for KDS check')))

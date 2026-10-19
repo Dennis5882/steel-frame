@@ -121,7 +121,7 @@ S.restorePoint = null
 reset(); dropNode = true
 await buildFactory(spec())
 ok(S.built === null && lastBot().includes('NODE') && lastBot().includes('/'), `count mismatch fails: ${lastBot().replace(/<[^>]+>/g, '')}`)
-ok(/sms_backup_.*\.mgbx$/.test(S.restorePoint ?? ''), `count mismatch after doc/new → restore point kept for the failure card (${S.restorePoint})`)
+ok(/sf_backup_.*\.mgbx$/.test(S.restorePoint ?? ''), `count mismatch after doc/new → restore point kept for the failure card (${S.restorePoint})`)
 
 /* 3. 전송 도중 취소 → 다음 호출 전에 멈춤, 모델 중간 상태 안내 */
 S.restorePoint = null
@@ -131,7 +131,7 @@ await buildFactory(spec())
 ok(calls.length === 5, `cancel stops before next call (calls ${calls.length})`)
 ok(S.built === null && lastBot() === t('job_cancelled_model'), 'cancel mid-send → rebuild message')
 ok(S.job === null && !S.busy, 'job cleared after cancel')
-ok(/sms_backup_/.test(S.restorePoint ?? ''), 'cancel after doc/new → restore point recorded')
+ok(/sf_backup_/.test(S.restorePoint ?? ''), 'cancel after doc/new → restore point recorded')
 
 /* 4. 해석 중 취소 → 해석 호출은 끝까지, 이후 호출 없음, 모델 유지 */
 reset()

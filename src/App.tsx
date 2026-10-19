@@ -1,13 +1,13 @@
-/* 앱 셸 — story 프로젝트와 같은 레이아웃: 헤더 / [가이드+채팅 | 분할선 | 탭 패널] / 하단 바 / 설정 드로어 */
+/* 앱 셸 (다층 강골조 화면: components/frame/*) — story 프로젝트와 같은 레이아웃: 헤더 / [가이드+채팅 | 분할선 | 탭 패널] / 하단 바 / 설정 드로어 */
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 'react'
-import { Workspace } from './components/Workspace'
 import { Drawers } from './components/Drawers'
 import { ConfirmDialog } from './components/ConfirmDialog'
 import { Footer } from './components/Footer'
-import { TaskNav } from './components/TaskNav'
 import { Header } from './components/Header'
-import { LogPanel, ModelPanel, ResultsPanel } from './components/Panels'
-import { View3D } from './components/View3D'
+import { LogPanel } from './components/Panels'
+import { FrameTaskNav, FrameWorkspace } from './components/frame/FrameWorkspace'
+import { FrameModelPanel, FrameResultsPanel } from './components/frame/FramePanels'
+import { FrameView3D } from './components/frame/FrameView3D'
 import { t, useLang, type I18nKey } from './i18n'
 import { syncBaseUrl, useStore, type PanelId } from './state/store'
 import { tab } from './state/ui'
@@ -64,8 +64,8 @@ export function App() {
       <Header onOpenMapi={() => setDrawer(true)} />
       <main ref={mainRef} className={dragging ? 'splitting' : undefined} style={{ ['--split' as any]: `${split}%` }}>
         <section className="chat">
-          <TaskNav collapsed={guideCollapsed} onToggle={() => setGuideCollapsed((c) => !c)} onOpenMapi={() => setDrawer(true)} />
-          <Workspace guideCollapsed={guideCollapsed} onOpenGuide={() => setGuideCollapsed(false)} onOpenMapi={() => setDrawer(true)} />
+          <FrameTaskNav collapsed={guideCollapsed} onToggle={() => setGuideCollapsed((c) => !c)} onOpenMapi={() => setDrawer(true)} />
+          <FrameWorkspace guideCollapsed={guideCollapsed} onOpenGuide={() => setGuideCollapsed(false)} onOpenMapi={() => setDrawer(true)} />
         </section>
         <div className="splitter" title={t('split_tip')} onPointerDown={onSplitDown} onPointerMove={onSplitMove}
           onPointerUp={onSplitUp} onPointerCancel={onSplitUp} onDoubleClick={resetSplit} />
@@ -89,9 +89,9 @@ export function App() {
             ))}
           </div>
           <div id="logP" role="tabpanel" aria-labelledby="tab-logP" className={`panel${s.panel === 'logP' ? ' on' : ''}`}><LogPanel /></div>
-          <div id="modelP" role="tabpanel" aria-labelledby="tab-modelP" className={`panel${s.panel === 'modelP' ? ' on' : ''}`}><ModelPanel /></div>
-          <div id="viewP" role="tabpanel" aria-labelledby="tab-viewP" className={`panel${s.panel === 'viewP' ? ' on' : ''}`}><View3D /></div>
-          <div id="resP" role="tabpanel" aria-labelledby="tab-resP" className={`panel${s.panel === 'resP' ? ' on' : ''}`}><ResultsPanel /></div>
+          <div id="modelP" role="tabpanel" aria-labelledby="tab-modelP" className={`panel${s.panel === 'modelP' ? ' on' : ''}`}><FrameModelPanel /></div>
+          <div id="viewP" role="tabpanel" aria-labelledby="tab-viewP" className={`panel${s.panel === 'viewP' ? ' on' : ''}`}><FrameView3D /></div>
+          <div id="resP" role="tabpanel" aria-labelledby="tab-resP" className={`panel${s.panel === 'resP' ? ' on' : ''}`}><FrameResultsPanel /></div>
         </section>
       </main>
       <Footer />
