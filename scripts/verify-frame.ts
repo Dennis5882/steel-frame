@@ -93,5 +93,10 @@ near(1 / d1.value, 2357, 15, 'RX 1F drift 1/2357 (tutorial)')
 ok(drift.rows.length === 4 && drift.rows.some((r) => r.note), 'drift: top storey filled from STORY_DISPLACEMENT')
 ok(review.find((i) => i.key === 'torsion' && i.dir === 'X')!.status !== 'ok', 'torsion ratio > 1.2 flagged (L-plan, tutorial table also irregular)')
 ok(review.find((i) => i.key === 'shearWeight' && i.dir === 'X')!.status === 'ok', 'shear-weight ≥ 0.016')
+/* 21:23 전체 실행: Y 비틀림·12모드 참여질량까지 회수 */
+ok(fx.eigen.periods.length === 12 && fx.story.torsionY?.length > 0, 'fixture: 12-mode eigen and torsion Y table')
+ok(review.find((i) => i.key === 'torsion' && i.dir === 'Y')!.status !== 'ok', 'torsion Y > 1.2 flagged (L-plan)')
+ok(review.find((i) => i.key === 'drift' && i.dir === 'Y')!.status === 'ok', 'RY drift within 1/250')
+ok(review.find((i) => i.key === 'effMass')!.status === 'ok', 'effective mass ≥ 90% (12 modes)')
 
 console.log(`Frame (CN): ${checks} checks passed (tutorial geometry, GB 50017/50011/50009 originals, live fixture beam ${design.byRole.beam!.ratio.toFixed(3)} vs 0.912, T1 ${fx.eigen.periods[0]} s)`)
