@@ -166,6 +166,7 @@ export async function optimizeFrame(): Promise<void> {
     F.opt = null
     if (F.built && sectionsKey(F.built.spec.sections) !== sectionsKey(original.sections)) {
       F.draft = clone(original)
+      F.built.trial = true // 산출물 단계가 '입력 변경' 대신 중단된 시험 모델이라고 안내
       addMsg('bot', lt('fr_opt_aborted', F.built.spec.sections.column, F.built.spec.sections.beam, F.built.spec.sections.brace), 'warn')
     }
     S.viewNonce++

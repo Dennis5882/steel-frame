@@ -283,16 +283,24 @@ for (const lang of ['ko', 'en', 'zh-CN', 'zh-TW'] as const) {
   ok(pdf.getPageCount() > 30, 'detailed PDF renders')
 }
 
-/* 산출물 선행 조건 — 단계 안내·카드·실행 함수가 같이 쓰는 frameOutputBlocker (고정 상태로 검사) */
+/* 산출물 선행 조건 — 단계 안내·카드·실행 함수가 같이 쓰는 outputBlocker (고정 상태로 검사) + 키 순서와 무관한 입력 변경 판정 */
 {
-  const { frameOutputBlocker } = await import('../src/frame/state')
-  const built = { spec, model, P }, edited = { ...spec, heights: spec.heights.map((h, i) => (i ? h : h + 0.3)) }
-  const st = (o: Record<string, unknown>) => ({ draft: spec, built, analysis: null, design: null, ...o }) as any
-  ok(frameOutputBlocker(st({ built: null })) === 'flow_need_model' && frameOutputBlocker(st({ built: null }), 'design') === 'flow_need_model', 'outputs: no model blocks every output')
-  ok(frameOutputBlocker(st({ draft: edited, analysis, design })) === 'fr_out_stale' && frameOutputBlocker(st({ draft: edited, analysis, design }), 'analysis') === 'fr_out_stale', 'outputs: edited inputs block every output, even with old results')
-  ok(frameOutputBlocker(st({})) === null, 'outputs: report/drawings/quantities need only the model')
-  ok(frameOutputBlocker(st({}), 'analysis') === 'need' && frameOutputBlocker(st({ analysis }), 'analysis') === null, 'outputs: detailed report waits for the analysis')
-  ok(frameOutputBlocker(st({ analysis }), 'design') === 'need' && frameOutputBlocker(st({ analysis, design }), 'design') === null, 'outputs: check CSV waits for the design checks')
+  const { outputBlocker, frameStale } = await import('../src/frame/state')
+  const built = { spec, model, P } as any
+  const st = (o: Record<string, unknown>) => ({ built, analysis: null, design: null, busy: false, stale: false, connected: true, ...o }) as any
+  const all = ['report', 'detail', 'drawings', 'quantities', 'csv'] as const
+  const full = { analysis, design }
+  ok(all.every((o) => outputBlocker(st({ ...full, busy: true }), o) === 'busy') && outputBlocker(st({ busy: true })) === 'busy', 'outputs: busy or a confirm dialog blocks the stage and every export')
+  ok(all.every((o) => outputBlocker(st({ built: null }), o) === 'flow_need_model'), 'outputs: no model blocks every output')
+  ok(all.every((o) => outputBlocker(st({ ...full, stale: true }), o) === 'fr_out_stale') && outputBlocker(st({ stale: true })) === 'fr_out_stale', 'outputs: edited inputs block every output, even with old results')
+  ok(all.every((o) => outputBlocker(st({ ...full, stale: true, built: { ...built, trial: true } }), o) === 'fr_out_trial'), 'outputs: an interrupted optimisation says so instead of "inputs changed"')
+  ok(['report', 'drawings', 'quantities'].every((o) => outputBlocker(st({ connected: false }), o as any) === null) && outputBlocker(st({})) === null, 'outputs: report/drawings/quantities need only the model (no Gen connection)')
+  ok(outputBlocker(st({}), 'detail') === 'fr_detail_need_anal' && outputBlocker(st({ analysis }), 'detail') === null, 'outputs: detailed report waits for the analysis')
+  ok(outputBlocker(st({ analysis, connected: false }), 'detail') === 'flow_need_connection' && outputBlocker(st({ analysis, connected: false })) === null, 'outputs: detailed report needs the Gen connection (card only, not the stage)')
+  ok(outputBlocker(st({ analysis }), 'csv') === 'fr_csv_need_design' && outputBlocker(st(full), 'csv') === null, 'outputs: check CSV waits for the design checks')
+  const reordered = Object.fromEntries(Object.entries(structuredClone(spec)).reverse()) as any
+  reordered.sections = Object.fromEntries(Object.entries(spec.sections).reverse())
+  ok(!frameStale({ draft: reordered, built }) && frameStale({ draft: { ...spec, heights: spec.heights.map((h, i) => (i ? h : h + 0.3)) }, built }), 'stale: same values in another key order are not a change; a real edit is')
 }
 
 console.log(`Frame report/drawings/optimisation: ${checks} checks passed (4 languages PDF + Word, ${elevationLines(spec).length + 2} drawing sheets, OTM, lightest sections)`)

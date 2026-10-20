@@ -14,7 +14,8 @@ import { FRAME_TEMPLATES, type FrameTemplateKey } from './templates'
 export const FRAME_STEPS = ['fs_grid', 'fs_stories', 'fs_sections', 'fs_braces', 'fs_loads', 'fs_lateral', 'fs_review'] as const
 export const REVIEW_STEP = FRAME_STEPS.length - 1
 
-export interface FrameBuilt { spec: FrameSpec; model: FrameModel; P: FramePayloads; counts: SendCounts; file: string }
+/** trial = 최적화가 중단돼 Gen 에 남은 시험 모델 (입력은 최적화 전 단면으로 되돌려 둠). 모델을 다시 만들면 새 FrameBuilt 라 사라진다 */
+export interface FrameBuilt { spec: FrameSpec; model: FrameModel; P: FramePayloads; counts: SendCounts; file: string; trial?: boolean }
 
 export function freshFrameState() {
   return {
@@ -77,7 +78,9 @@ export function draftPayloads(spec: FrameSpec, model: FrameModel): FramePayloads
   try { return framePayloads(spec, model) } catch { return null }
 }
 
-const canon = (v: unknown) => JSON.stringify(v)
+/* 키 순서와 무관한 직렬화 — 같은 값을 다른 순서로 다시 만든 스펙을 '변경'으로 보지 않는다 */
+const canon = (v: unknown) => JSON.stringify(v, (_k, x) => x && typeof x === 'object' && !Array.isArray(x)
+  ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, (x as Record<string, unknown>)[k]])) : x)
 /** 편집 스펙이 Gen 에 보낸 것과 다름 */
 export const frameStale = (f: Pick<FrameState, 'draft' | 'built'>) => !!f.built && !!f.draft && canon(f.draft) !== canon(f.built.spec)
 
@@ -95,11 +98,11 @@ export type FrameTask = 'model' | 'analysis' | 'design' | 'optimize' | 'outputs'
 export type FrameTaskStatus = 'todo' | 'ready' | 'done' | 'running' | 'failed' | 'cancelled' | 'stale'
 const JOB_TASK: Record<string, FrameTask> = { build: 'model', restore: 'model', anal: 'analysis', design: 'design', pdf: 'outputs', docx: 'outputs', dwgpdf: 'outputs', opt: 'optimize' }
 
-export function frameBlocker(task: FrameTask): 'busy' | 'flow_need_model' | 'wf_stale_edited' | 'fr_out_stale' | 'need_anal' | 'flow_need_connection' | 'fr_opt_need_design' | null {
+export function frameBlocker(task: FrameTask): OutputBlock | 'wf_stale_edited' | 'need_anal' | 'fr_opt_need_design' | null {
+  /* 산출물 단계는 outputBlocker 의 단계 판정 (산출물을 지정하지 않음) */
+  if (task === 'outputs') return outputBlocker(outputState())
   if (S.busy || S.confirm) return 'busy'
   if (task === 'model') return null
-  /* 산출물은 판정을 frameOutputBlocker 하나에 둔다 (단계 안내·카드·실행 함수가 같은 결과) */
-  if (task === 'outputs') { const b = frameOutputBlocker(F); return b === 'need' ? null : b }
   if (!F.built) return 'flow_need_model'
   if (frameStale(F)) return 'wf_stale_edited'
   if (task === 'design' && !F.analysis) return 'need_anal'
@@ -108,13 +111,26 @@ export function frameBlocker(task: FrameTask): 'busy' | 'flow_need_model' | 'wf_
   return null
 }
 
-/* 산출물 선행 조건 (순수 — 상태를 인자로 받아 verify 에서 고정 상태로 검사한다).
-   모델만 있으면 계산서·도면·물량은 낸다(해석·검토 전 부분은 '없음' 표시). need 가 있으면 그 결과까지 필요. 'need' 의 이유 문구는 산출물마다 다르다 */
-export type FrameOutNeed = 'analysis' | 'design'
-export function frameOutputBlocker(f: Pick<FrameState, 'draft' | 'built' | 'analysis' | 'design'>, need?: FrameOutNeed): 'flow_need_model' | 'fr_out_stale' | 'need' | null {
+/* 산출물 선행 조건 — 단계 안내·카드·실행 함수가 모두 outputBlocker 하나를 쓴다.
+   순수 함수: 상태 스냅샷(outputState)을 받아 verify 에서 고정 상태로 검사한다. 입력 변경(stale)은 스냅샷에서 한 번만 계산한다.
+   산출물을 지정하지 않으면 단계 전체 판정(작업 중·모델 없음·입력 변경), 지정하면 그 산출물의 조건(Gen 연결·필요한 결과)까지 본다.
+   돌려주는 값이 곧 이유 문구 키다. 모델만 있으면 계산서·도면·물량은 낸다(해석·검토 전 부분은 '없음' 표시) */
+export type FrameOutput = 'report' | 'detail' | 'drawings' | 'quantities' | 'csv'
+const OUTPUT_RULES: Partial<Record<FrameOutput, { gen?: true; need?: ['analysis' | 'design', 'fr_detail_need_anal' | 'fr_csv_need_design'] }>> = {
+  detail: { gen: true, need: ['analysis', 'fr_detail_need_anal'] }, // Gen NX 화면을 캡처한다
+  csv: { need: ['design', 'fr_csv_need_design'] },
+}
+export type OutputState = Pick<FrameState, 'built' | 'analysis' | 'design'> & { busy: boolean; stale: boolean; connected: boolean }
+export type OutputBlock = 'busy' | 'flow_need_model' | 'fr_out_stale' | 'fr_out_trial' | 'flow_need_connection' | 'fr_detail_need_anal' | 'fr_csv_need_design'
+export const outputState = (): OutputState => ({ built: F.built, analysis: F.analysis, design: F.design, busy: S.busy || !!S.confirm, stale: frameStale(F), connected: !!S.mapiKey.trim() })
+export function outputBlocker(f: OutputState, out?: FrameOutput): OutputBlock | null {
+  if (f.busy) return 'busy'
   if (!f.built) return 'flow_need_model'
-  if (frameStale(f)) return 'fr_out_stale'
-  if (need && !(need === 'analysis' ? f.analysis : f.design)) return 'need'
+  if (f.built.trial) return 'fr_out_trial'
+  if (f.stale) return 'fr_out_stale'
+  const r = out && OUTPUT_RULES[out]
+  if (r?.gen && !f.connected) return 'flow_need_connection'
+  if (r?.need && !f[r.need[0]]) return r.need[1]
   return null
 }
 
