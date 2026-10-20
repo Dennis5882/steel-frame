@@ -12,7 +12,7 @@ import { framePayloads } from '../src/frame/gen'
 import { n, type Request } from '../src/frame/results'
 import { designMembers, runFrameDesign } from '../src/frame/design'
 import { overturning, storyReview } from '../src/frame/story'
-import { analyze, collectAnalysis, collectForces, expectOk, runRound, sendFrame, type FrameRound } from '../src/frame/run'
+import { analyze, collectAnalysis, collectForces, expectOk, fitView, runRound, sendFrame, type FrameRound } from '../src/frame/run'
 import { optIter, optSummary, optimizeLoop, sectionsKey, type FrameSections } from '../src/frame/optimize'
 import type { FrameSpec } from '../src/frame/types'
 
@@ -34,7 +34,7 @@ for (const w of P.wind) log(`wind ${w.dir}: T1 ${w.T1.toFixed(3)} s, base ${w.ba
 try {
   expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_backup_${stamp}.mgbx` }), 'backup')
   const counts = await sendFrame(req, P, model)
-  log('sent / readback', counts)
+  log('sent / readback', counts, '· ISO zoom fit', await fitView(req, `C:/temp/sf_view_${stamp}.png`))
   evidence.counts = counts
 
   expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_frame_${stamp}.mgbx` }), 'save model')
@@ -100,7 +100,7 @@ try {
     let cur: St = { spec, model, P, A, forces, review, design }
     const iterOf = (c: St, it: number) => optIter(it, c.spec, c.model, c.review, c.design)
     const runSpec = async (s2: FrameSpec, tag: string): Promise<St> => {
-      const r = await runRound(req, s2, { save: async () => expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_frame_${stamp}_${tag}.mgbx` }), 'save opt model'), log: (m) => log(`  ${m}`) })
+      const r = await runRound(req, s2, { viewPath: `C:/temp/sf_view_${stamp}_${tag}.png`, save: async () => expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_frame_${stamp}_${tag}.mgbx` }), 'save opt model'), log: (m) => log(`  ${m}`) })
       return { ...r, A: r.analysis }
     }
     const show = (c: St, it: number) => { const x = iterOf(c, it); log(`  round ${it}: ${sectionsKey(x.sections)} · ${x.weight.toFixed(2)} t · max ${x.maxRatio.toFixed(3)} · NG ${x.ng} · drift ${x.driftOk ? 'OK' : 'NG'} · T1 ${c.A.story.eigen?.periods[0]?.toFixed(3)} s`); return x }

@@ -5,11 +5,11 @@ import { mapi } from '../mapi/client'
 import { S, notify } from '../state/store'
 import { addMsg, escapeHtml, tab } from '../state/ui'
 import { confirmAction } from '../components/ConfirmDialog'
-import { autoSave } from './save'
+import { autoSave, autoSavePath } from './save'
 import { beginJob, checkCancel, endJob, failMsg, setIter, stage } from './job'
 import { buildFrame } from '../frame/geometry'
 import { framePayloads } from '../frame/gen'
-import { analyze, collectAnalysis, collectForces, COLLECT_CALLS, equilibriumError, expectOk, runRound, SEND_CALLS, sendFrame } from '../frame/run'
+import { analyze, collectAnalysis, collectForces, COLLECT_CALLS, equilibriumError, expectOk, fitView, runRound, SEND_CALLS, sendFrame, VIEW_CALLS } from '../frame/run'
 import { storyReview } from '../frame/story'
 import { designMembers, memberFails, runFrameDesign } from '../frame/design'
 import type { Request } from '../frame/results'
@@ -20,14 +20,16 @@ import type { FrameModel, FrameSpec } from '../frame/types'
 const req: Request = (m, p, b) => mapi(m, p, b as Record<string, unknown> | undefined)
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
+const viewPng = () => autoSavePath('view').replace(/\.mgbx$/, '.png')
 
 /** [모델 생성] 전송 — 생성 직전 Gen 문서를 백업(복원 지점)한 뒤 보낸다. 결과는 비운다 */
 async function sendCore(spec: FrameSpec, model: FrameModel): Promise<void> {
   const P = framePayloads(spec, model)
-  stage('st_send', SEND_CALLS + 2)
+  stage('st_send', SEND_CALLS + VIEW_CALLS + 2)
   S.restorePoint = await autoSave('backup')
   notify()
   const counts = await sendFrame(req, P, model)
+  await fitView(req, viewPng())
   const file = await autoSave('model')
   clearResults()
   F.built = { spec: clone(spec), model, P, counts, file }
@@ -181,6 +183,7 @@ async function runState(sections: FrameSections): Promise<void> {
   let file = ''
   const r = await runRound(req, spec, {
     save: async () => { file = await autoSave('model') ?? '' },
+    viewPath: viewPng(),
     stage: (k, n) => stage(k, n),
     onSent: (model, P, counts) => {
       F.built = { spec: clone(spec), model, P, counts, file: '' }

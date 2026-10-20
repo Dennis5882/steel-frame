@@ -71,6 +71,13 @@ export function reportPdfDefinition(doc: Document, serialize: (el: Element) => s
     if (tag === 'table') return tables(el)
     if (tag === 'figure') {
       const original = el.getElementsByTagName('svg')[0]
+      /* 래스터 그림 (data URL <img width height>) — 골조 앱 상세 계산서의 Gen NX 캡처 (추가만, 공장 계산서 무관) */
+      const img = original ? undefined : el.getElementsByTagName('img')[0]
+      if (img && /^data:image\/(png|jpe?g);base64,/.test(img.getAttribute('src') ?? '')) {
+        const w = Number(img.getAttribute('width')) || 640, h = Number(img.getAttribute('height')) || 480
+        const cap = el.getElementsByTagName('figcaption')[0]?.textContent ?? ''
+        return [{ unbreakable: true, stack: [{ image: img.getAttribute('src')!, fit: [515, Math.min(480, 515 * h / w)], alignment: 'center' }, { text: cap, alignment: 'center', fontSize: 8, color: '#444', margin: [0, 5, 0, 8] }], margin: [0, 5, 0, 8] }]
+      }
       if (!original) return []
       const svg = original.cloneNode(true) as Element
       for (const node of [svg, ...Array.from(svg.getElementsByTagName('*'))]) {

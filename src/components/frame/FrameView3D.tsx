@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef } from 'react'
 import { t, useLang } from '../../i18n'
 import { S, notify, useStore, type CamId } from '../../state/store'
 import { F, draftModel, frameStale } from '../../frame/state'
-import type { FrameModel, FrameRole } from '../../frame/types'
+import type { FrameModel, FrameRole, FrameSpec } from '../../frame/types'
+import { gridX, gridY } from '../../frame/drawings'
 
 type Plotly = typeof import('plotly.js-dist-min')
 let plotlyP: Promise<Plotly> | null = null
@@ -21,6 +22,42 @@ const CAMS: Record<CamId, { eye: { x: number; y: number; z: number }; up?: { x: 
 const HIDDEN_AX = { visible: false, title: { text: '' }, showticklabels: false, showgrid: false, showline: false, zeroline: false, ticks: '', showbackground: false, showspikes: false }
 
 function css(name: string, fb: string) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fb }
+
+/** 축선(도면식) — 평면·정면·측면 보기에서만. 점선 축선 + 축 번호 원(X 1,2,3… / Y A,B,C…, 도면·FramePlan 과 같음) + 스팬 치수(mm).
+    정면·측면은 층 레벨선과 '이름 표고'도 그려 입면도처럼 보이게 한다. ISO 에서는 그리지 않는다(모델에 가려 어지러움) */
+function gridTraces(spec: FrameSpec, levels: number[], cam: CamId, visible: boolean) {
+  if (cam === 'iso') return []
+  const { xs, ys } = spec
+  const z0 = levels[0], zt = levels.at(-1)!
+  const Lx = xs.at(-1)! - xs[0], Ly = ys.at(-1)! - ys[0], d = 0.1 * Math.max(Lx, Ly, zt - z0, 6)
+  const color = css('--p-axis', '#8a94a6'), font = css('--font-mono', 'monospace'), txt = css('--p-txt', '#c9d4e8'), dimc = css('--amber', '#b58a00')
+  const L: [number, number, number][][] = [], B: [number, number, number, string][] = [], D: [number, number, number, string][] = [], T: [number, number, number, string][] = []
+  const mm = (v: number) => String(Math.round(v * 1000))
+  if (cam === 'top') {
+    for (const [i, x] of xs.entries()) { L.push([[x, ys[0] - d * 0.7, z0], [x, ys.at(-1)! + d * 0.3, z0]]); B.push([x, ys[0] - d, z0, gridX(i)]) }
+    for (const [j, y] of ys.entries()) { L.push([[xs[0] - d * 0.7, y, z0], [xs.at(-1)! + d * 0.3, y, z0]]); B.push([xs[0] - d, y, z0, gridY(j)]) }
+    xs.slice(1).forEach((x, i) => D.push([(x + xs[i]) / 2, ys.at(-1)! + d * 0.55, z0, mm(x - xs[i])]))
+    ys.slice(1).forEach((y, j) => D.push([xs.at(-1)! + d * 0.55, (y + ys[j]) / 2, z0, mm(y - ys[j])]))
+  } else {
+    /* 정면 = X 축선(1,2,3…)을 y 앞면에, 측면 = Y 축선(A,B,C…)을 x 오른쪽 면에 */
+    const front = cam === 'front', u = front ? xs : ys, at = front ? ys[0] : xs.at(-1)!
+    const P = (v: number, z: number): [number, number, number] => (front ? [v, at, z] : [at, v, z])
+    for (const [i, v] of u.entries()) { L.push([P(v, z0 - d * 0.7), P(v, zt + d * 0.3)]); B.push([...P(v, z0 - d), front ? gridX(i) : gridY(i)]) }
+    u.slice(1).forEach((v, i) => D.push([...P((v + u[i]) / 2, zt + d * 0.55), mm(v - u[i])]))
+    levels.forEach((z, k) => { L.push([P(u[0] - d * 0.4, z), P(u.at(-1)! + d * 0.4, z)]); T.push([...P(u.at(-1)! + d * 0.5, z), `${spec.storyNames[k] ?? ''} ${z >= 0 ? '+' : ''}${z.toFixed(3)}`]) })
+  }
+  const flat = (ls: [number, number, number][][], k: 0 | 1 | 2) => ls.flatMap((l) => [l[0][k], l[1][k], null])
+  const pts = (ps: [number, number, number, string][], k: 0 | 1 | 2) => ps.map((p) => p[k])
+  const text = (ps: [number, number, number, string][], color: string, size: number, pos: string) => ({ type: 'scatter3d', mode: 'text', x: pts(ps, 0), y: pts(ps, 1), z: pts(ps, 2), text: ps.map((p) => p[3]),
+    textposition: pos, hoverinfo: 'skip', showlegend: false, visible, textfont: { size, color, family: font } })
+  return [
+    { type: 'scatter3d', mode: 'lines', x: flat(L, 0), y: flat(L, 1), z: flat(L, 2), hoverinfo: 'skip', showlegend: false, visible, line: { color, width: 1, dash: 'dash' } },
+    { type: 'scatter3d', mode: 'markers+text', x: pts(B, 0), y: pts(B, 1), z: pts(B, 2), text: B.map((b) => b[3]), textposition: 'middle center', hoverinfo: 'skip', showlegend: false, visible,
+      marker: { size: 13, symbol: 'circle-open', color }, textfont: { size: 11, color: txt, family: font } },
+    text(D, dimc, 10, 'middle center'),
+    ...(T.length ? [text(T, txt, 10, 'middle right')] : []),
+  ]
+}
 
 function traces(m: FrameModel, ratio: Map<number, number> | null, vis: Record<string, boolean>) {
   const byId = new Map(m.nodes.map((n) => [n.id, n]))
@@ -50,6 +87,7 @@ export function FrameView3D() {
   const ref = useRef<HTMLDivElement>(null)
   const preview = s.task === 'model' && F.view === 'edit' && (!F.built || frameStale(F))
   const model = useMemo(() => preview ? draftModel(F.draft).model : F.built?.model ?? draftModel(F.draft).model, [s.viewNonce, preview])
+  const spec = preview ? F.draft : F.built?.spec ?? F.draft
   const ratio = useMemo(() => !preview && F.ratioView && F.design ? new Map(F.design.members.map((m) => [m.id, Math.max(m.ratio, m.detailRatio)])) : null, [s.viewNonce, preview, F.ratioView, F.design])
 
   useEffect(() => {
@@ -64,20 +102,23 @@ export function FrameView3D() {
         return hide ? { ...a, ...HIDDEN_AX } : a
       }
       const c = S.cam, e = CAMS[c].eye
-      void Plotly.react(el, traces(model, ratio, S.vis3d as unknown as Record<string, boolean>), {
+      const vis = S.vis3d as unknown as Record<string, boolean>
+      const axes = spec ? gridTraces(spec, model.levels, c, vis.grid !== false) : []
+      void Plotly.react(el, [...axes, ...traces(model, ratio, vis)], {
         paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', margin: { l: 0, r: 0, t: ratio ? 28 : 0, b: 0 }, font: { family: font, color: txt }, showlegend: !!ratio,
         uirevision: `${c}:${S.camReset}`,
         legend: { orientation: 'h', x: 0, y: 1.03, itemclick: false, itemdoubleclick: false, bgcolor: css('--p-legend', 'rgba(0,0,0,0.85)'), font: { size: 11, color: txt, family: font } },
         modebar: { orientation: 'h', bgcolor: 'rgba(0,0,0,0)', color: axc, activecolor: txt },
         scene: {
           aspectmode: 'data',
-          xaxis: ax(c === 'side', 'X (m)'), yaxis: ax(c === 'front', 'Y (m)'), zaxis: ax(c === 'top', 'Z (m)'),
+          /* 평면·정면·측면은 도면처럼 축선·치수가 기준 → Plotly 눈금 숨김. ISO 만 좌표축 */
+          xaxis: ax(c !== 'iso', 'X (m)'), yaxis: ax(c !== 'iso', 'Y (m)'), zaxis: ax(c !== 'iso', 'Z (m)'),
           camera: { eye: { x: e.x * 1.15, y: e.y * 1.15, z: e.z * 1.15 }, up: CAMS[c].up ?? { x: 0, y: 0, z: 1 }, projection: { type: c === 'iso' ? 'perspective' : 'orthographic' } },
         },
       } as any, { responsive: true, displaylogo: false, displayModeBar: true, modeBarButtonsToRemove: ['resetCameraLastSave3d', 'hoverClosest3d'], toImageButtonOptions: { format: 'png', filename: 'steel_frame_3d', scale: 2 } } as any)
     })
     return () => { alive = false }
-  }, [model, ratio, s.cam, s.camReset, s.theme, lang, s.vis3d])
+  }, [model, spec, ratio, s.cam, s.camReset, s.theme, lang, s.vis3d])
 
   const setCam = (c: CamId) => { S.cam = c; notify() }
   const toggle = (k: string) => { S.vis3d = { ...S.vis3d, [k]: !(S.vis3d as any)[k] } as any; notify() }
@@ -95,8 +136,8 @@ export function FrameView3D() {
     </div>
     {!ratio && <div className="view-tb view-tb2">
       <span className="vlbl">{t('view_show')}</span>
-      {([...ROLES.map((r) => [r, ROLE_VAR[r][0], t(`fr_role_${r}`)]), ['support', '--p-sup', t('support')]] as [string, string, string][])
-        .filter(([k]) => k === 'support' || model?.elements.some((e) => e.role === k))
+      {([...ROLES.map((r) => [r, ROLE_VAR[r][0], t(`fr_role_${r}`)]), ['support', '--p-sup', t('support')], ['grid', '--p-axis', t('rp_grid')]] as [string, string, string][])
+        .filter(([k]) => k === 'support' || k === 'grid' || model?.elements.some((e) => e.role === k))
         .map(([k, color, label]) => <button key={k} className={`vtog ${(S.vis3d as any)[k] !== false ? 'on' : 'off'}`} aria-pressed={(S.vis3d as any)[k] !== false} onClick={() => toggle(k)}>
           <span className={`swatch sw-${k === 'support' ? 'diamond' : 'line'}`} style={{ background: `var(${color})` }} /><span>{label}</span></button>)}
     </div>}

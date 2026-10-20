@@ -542,6 +542,9 @@ export const en = {
   g_help_2: 'Release notes',
   g_help_2_cmd: 'release notes',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_3_0_1: 'Detailed calculation report (Word): Gen NX captures the model, floor plan, frame elevations, reactions, displacement contour, moment and axial diagrams and stresses into the save folder on this PC, and the report includes them with the Gen storey tables. Allow the app to read the save folder once (Chrome or Edge).',
+  rn_v1_3_0_2: 'Quantity take-off as Excel or CSV: members by type and section with kg/m, weight and paint area, weight by storey, order weight with 5 % loss and steel per floor area.',
+  rn_v1_3_0_3: 'The 3D tab draws plan, front and side views like drawings — grid bubbles 1, 2, 3 / A, B, C, span dimensions and level lines — and after the model is created Gen NX shows the whole model in an ISO view.',
   rn_v1_2_0_1: 'Calculation report as PDF, Word or HTML: overview, model, loads and combinations, analysis results, storey checks, GB 50017 member checks with the governing member details, assumptions, and drawings. It can also be exported before the analysis (model and loads only).',
   rn_v1_2_0_2: 'Simple drawings as A3 PDF or DXF: typical floor framing plan, elevations of the braced frame lines, member schedule with general notes. The overturning moment is read from Gen (OVERTURNING_MOMENT) and shown with the app check ΣV·h; they matched in the live run.',
   rn_v1_2_0_3: 'Section optimisation: the lightest rolled H per role (ratio ≤ 0.95, detailing limits), recreated and reanalysed in Gen until it converges (up to 5 rounds); cancelling keeps your original sections. Diagonal beams now count in the column effective length factors, and the X/Y spacing switches to unequal by itself when one span is edited.',

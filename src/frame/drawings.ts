@@ -3,8 +3,9 @@
    좌표: 모델 m → mm. 격자 이름: X 1,2,3… / Y A,B,C… (FramePlan 과 같음). 문자는 ASCII (DXF R12). */
 import { Dxf, toSvgSheets, type SvgLayerStyle } from '../drawing/dxf'
 import { hSection } from './design'
-import { elementLength } from './geometry'
 import { SFI } from './loads'
+import { FRAME_MARK, frameQuantities } from './quantities'
+export { FRAME_MARK }
 import type { Axis, FrameModel, FrameRole, FrameSpec } from './types'
 
 const LAYERS = [
@@ -16,11 +17,8 @@ const SVG_STYLE: Record<string, SvgLayerStyle> = {
   BRACE: { color: '#c2399b', width: 1.1 }, DIM: { color: '#7a5d00', width: 0.5 }, TEXT: { color: '#111', width: 0.5 }, BORDER: { color: '#111', width: 0.8 },
 }
 const LAYER_OF: Record<FrameRole, string> = { column: 'COLUMN', beam: 'BEAM', brace: 'BRACE' }
-/** 부재 기호 (GB/T 50105 관용: 钢柱 GZ · 钢梁 GL · 支撑 ZC) */
-export const FRAME_MARK: Record<FrameRole, string> = { column: 'GZ1', beam: 'GL1', brace: 'ZC1' }
 const ROLE_EN: Record<FrameRole, string> = { column: 'Column', beam: 'Beam', brace: 'Brace (inverted V)' }
 const TXT = 250
-const STEEL_T_PER_MM3 = 7.85e-9
 
 export const gridX = (i: number) => String(i + 1)
 export const gridY = (j: number) => String.fromCharCode(65 + j)
@@ -28,21 +26,8 @@ export const gridY = (j: number) => String.fromCharCode(65 + j)
 export interface FrameDrawingInput { spec: FrameSpec; model: FrameModel; title: string; date: string; version: string; colStrongAxis?: Axis }
 
 export interface ScheduleRow { role: FrameRole; mark: string; section: string; count: number; length: number; tons: number }
-/** 부재표 — 종류별 단면·개수(요소 기준)·길이·중량 */
-export function frameSchedule(model: FrameModel): ScheduleRow[] {
-  const out: ScheduleRow[] = []
-  for (const role of ['column', 'beam', 'brace'] as const) {
-    const els = model.elements.filter((e) => e.role === role)
-    if (!els.length) continue
-    for (const section of [...new Set(els.map((e) => e.section))]) {
-      const list = els.filter((e) => e.section === section)
-      const length = list.reduce((a, e) => a + elementLength(model, e), 0)
-      const members = new Set(list.map((e) => e.member)).size
-      out.push({ role, mark: FRAME_MARK[role], section, count: members, length, tons: hSection(section).A * length * 1000 * STEEL_T_PER_MM3 })
-    }
-  }
-  return out
-}
+/** 부재표 — 물량 산출(frameQuantities)과 같은 값 */
+export const frameSchedule = (model: FrameModel): ScheduleRow[] => frameQuantities(model).rows.map((r) => ({ role: r.role, mark: r.mark, section: r.section, count: r.members, length: r.length, tons: r.weight }))
 
 export function buildFrameDxf(input: FrameDrawingInput): string { return drawFrame(input).toString() }
 export function buildFrameDrawingSvgs(input: FrameDrawingInput): { name: string; svg: string }[] { return toSvgSheets(drawFrame(input), SVG_STYLE) }

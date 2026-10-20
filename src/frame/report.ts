@@ -23,7 +23,11 @@ export interface FrameReportInput {
   opt?: FrameOptSummary | null
   /** 날짜 문자열 (테스트 고정용) */
   date?: string
+  /** 상세 계산서 — Gen NX 캡처 그림(data URL)과 Gen 층 결과 원본 표. 없으면 기본 계산서 */
+  gen?: { figures: GenFigure[]; failed: string[] }
 }
+export interface GenFigure { key: string; section: 'model' | 'analysis'; caption: string; src: string; width: number; height: number }
+const genFig = (g: GenFigure) => `<figure><img src="${g.src}" width="${g.width}" height="${g.height}" alt="${esc(g.caption)}" style="max-width:100%;height:auto"><figcaption>${esc(g.caption)}</figcaption></figure>`
 
 const ROLES: FrameRole[] = ['column', 'beam', 'brace']
 const esc = (s: unknown) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)
@@ -97,6 +101,8 @@ export function buildFrameReport(input: FrameReportInput): string {
 
   /* 2. 모델 */
   h2('rp_s_model')
+  const genOf = (sec: 'model' | 'analysis') => input.gen?.figures.filter((g) => g.section === sec) ?? []
+  if (genOf('model').length) { h3(L('rp_gen_model')); for (const g of genOf('model')) parts.push(genFig(g)) }
   h3(L('fr_grid'))
   const spanRow = (axis: 'X' | 'Y') => {
     const c = axis === 'X' ? spec.xs : spec.ys, lab = axis === 'X' ? gridX : gridY
@@ -176,6 +182,11 @@ export function buildFrameReport(input: FrameReportInput): string {
   h2('rp_s_analysis')
   if (!A) parts.push(`<p>${L('rp_no_analysis')}</p>`)
   else {
+    if (genOf('analysis').length) {
+      h3(L('rp_gen_results'))
+      for (const g of genOf('analysis')) parts.push(genFig(g))
+      if (input.gen?.failed.length) parts.push(`<p class="note">${L('rp_gen_failed', input.gen.failed.join(', '))}</p>`)
+    }
     h3(L('fr_equilibrium'))
     parts.push(table([t('res_lc'), 'Gen (kN)', `${t('fr_app')} (kN)`, t('fr_diff')],
       Object.entries(A.equilibrium).map(([k, e]) => [k, f(e.gen, 2), f(e.app, 2), `<span class="${equilibriumError(e) < 1e-3 ? 'ok' : 'ng'}">${(equilibriumError(e) * 100).toFixed(4)} %</span>`])))
@@ -199,6 +210,23 @@ export function buildFrameReport(input: FrameReportInput): string {
       h3(L('rp_otm'))
       parts.push(table([t('fr_story'), 'Gen RX', `ΣV·h X`, 'Gen RY', `ΣV·h Y`], otm.map((o) => [esc(o.story), f(o.gen.X, 1), f(o.app.X, 1), f(o.gen.Y, 1), f(o.app.Y, 1)])))
       parts.push(`<p class="note">${L('rp_otm_note')}${otm.every((o) => o.gen.X === null && o.gen.Y === null) ? ` ${L('rp_otm_missing')}` : ''}</p>`)
+    }
+    /* 상세 계산서: Gen 층 결과 표 원본 (예제 그림 4-11·4-12·4-16·4-17 에 해당) */
+    if (input.gen) {
+      const raw = (title: string, rows: Record<string, string>[] | undefined, cols: [string, string][]) => {
+        if (!rows?.length) return
+        h3(title)
+        parts.push(table(cols.map(([, h]) => h), rows.map((r) => cols.map(([k]) => { const v = r[k]; const x = Number(v); return v === undefined ? '—' : Number.isFinite(x) && /\d/.test(v) ? String(+x.toPrecision(6)) : esc(v) }))))
+      }
+      const st2 = A.story
+      for (const d of ['X', 'Y'] as const) {
+        raw(L('rp_gen_t_drift', `R${d}`), d === 'X' ? st2.driftX : st2.driftY, [['Story', t('fr_story')], ['Story Height', 'h (m)'], ['Maximum Drift of All Vertical Elements/Story Drift', 'Δmax (m)'],
+          ['Maximum Drift of All Vertical Elements/Story Drift Ratio', 'Δmax/h'], ['Drift at the Center of Mass/Story Drift', 'Δcm (m)'], ['Drift at the Center of Mass/Story Drift Ratio', 'Δcm/h']])
+        raw(L('rp_gen_t_disp', `R${d}`), d === 'X' ? st2.dispX : st2.dispY, [['Story', t('fr_story')], ['Level', 'z (m)'], ['MaximumDisplacement', 'umax (m)'], ['AverageDisplacement', 'uavg (m)'], ['Maximum/Average', 'max/avg']])
+        raw(L('rp_gen_t_stiff', `R${d}`), d === 'X' ? st2.stiffX : st2.stiffY, [['Story', t('fr_story')], ['Story Shear Force', 'V (kN)'], ['Story Drift', 'Δ (m)'], ['Story Stiffness', 'K (kN/m)'], ['Story Stiffness Ratio', 'K ratio']])
+        raw(L('rp_gen_t_torsion', `R${d}`), d === 'X' ? st2.torsionX : st2.torsionY, [['Story', t('fr_story')], ['Average Value of Extreme Points/Story Drift', 'Δavg (m)'], ['Maximum Value/Story Drift', 'Δmax (m)'], ['Maximum Value/Node', 'Node']])
+      }
+      parts.push(`<p class="note">${L('rp_gen_t_note')}</p>`)
     }
     const miss = Object.keys(A.missing)
     if (miss.length) parts.push(`<p class="note">${L('fl_tables_missing', miss.join(', '))}</p>`)
@@ -278,7 +306,7 @@ export function buildFrameReport(input: FrameReportInput): string {
   for (const sh of sheets) parts.push(fig(sh.svg, sh.name))
   parts.push('</section>')
 
-  const title = t('rp_title')
+  const title = input.gen ? t('rp_title_detail') : t('rp_title')
   const uiFonts = typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol) ? new URL('/fonts/ui-fonts.css', window.location.href).href : '/fonts/ui-fonts.css'
   return `<!doctype html><html lang="${htmlLang(getLang())}"><head><meta charset="utf-8"><title>${esc(title)}</title>
 <link rel="stylesheet" href="${esc(uiFonts)}">

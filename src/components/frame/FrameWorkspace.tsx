@@ -1,6 +1,6 @@
 /* 다층 강골조 작업 영역 — 左 작업 흐름(FrameTaskNav) + 가운데: 모델링(시작·8단계) / 해석 / 설계 검토 / 최적화 / 출력.
    공장 Workspace·TaskNav·TaskStage 와 같은 레이아웃·CSS, 상태는 src/frame/state.ts */
-import { ArrowRight, BookOpen, Building2, Plus, Calculator, ChevronLeft, CircleHelp, ClipboardCheck, Download, Eraser, FileText, FolderOpen, History, Play, RotateCcw, Ruler, Settings, SlidersHorizontal, Table2 } from 'lucide-react'
+import { ArrowRight, BookOpen, Camera, Building2, Plus, Calculator, ChevronLeft, CircleHelp, ClipboardCheck, Download, Eraser, FileText, FolderOpen, History, Play, RotateCcw, Ruler, Settings, SlidersHorizontal, Table2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { t, type I18nKey } from '../../i18n'
 import { S, notify, useStore } from '../../state/store'
@@ -10,7 +10,7 @@ import { JobBar } from '../JobBar'
 import { ActivityHistory, ArtifactList, NoticeCenter } from '../ActivityViews'
 import { F, frameBlocker, frameStale, frameTaskStatus, resetFrame, startTemplate, type FrameTask } from '../../frame/state'
 import { analyzeFrame, designFrame, optimizeFrame, restoreFrameBackup } from '../../actions/frame'
-import { downloadFrameDrawingsPdf, downloadFrameDxf, downloadFrameReportDocx, downloadFrameReportPdf, openFrameReport } from '../../actions/frameOutputs'
+import { downloadFrameDetailedDocx, downloadFrameDrawingsPdf, downloadFrameDxf, downloadFrameQuantities, downloadFrameReportDocx, downloadFrameReportPdf, openFrameReport } from '../../actions/frameOutputs'
 import { OPT_MAX_ITER, OPT_TARGET } from '../../frame/optimize'
 import { FrameWizard } from './FrameWizard'
 import type { FrameTemplateKey } from '../../frame/templates'
@@ -79,17 +79,19 @@ function downloadCsv() {
 }
 
 /* 산출물 카드 — 형식을 고른 뒤 한 번에 추출 (공장 TaskStage ExportCard 와 같은 모양). 고른 형식은 이 브라우저에 기억 */
-type FrameOut = { id: string; title: I18nKey; hint: I18nKey; Icon: typeof FileText; formats: [string, string, () => void][]; needDesign?: boolean }
+type FrameOut = { id: string; title: I18nKey; hint: I18nKey; Icon: typeof FileText; formats: [string, string, () => void][]; needDesign?: boolean; needAnalysis?: boolean }
 const FRAME_OUTPUTS: FrameOut[] = [
   { id: 'report', title: 'out_report', hint: 'fr_out_report_hint', Icon: FileText, formats: [['pdf', 'PDF', () => void downloadFrameReportPdf()], ['docx', 'Word', () => void downloadFrameReportDocx()], ['html', 'HTML', openFrameReport]] },
+  { id: 'detail', title: 'fr_out_detail', hint: 'fr_out_detail_hint', Icon: Camera, formats: [['docx', 'Word', () => void downloadFrameDetailedDocx()]], needAnalysis: true },
   { id: 'drawings', title: 'out_drawings', hint: 'fr_out_dwg_hint', Icon: Ruler, formats: [['pdf', 'PDF', () => void downloadFrameDrawingsPdf()], ['dxf', 'DXF', downloadFrameDxf]] },
-  { id: 'csv', title: 'fr_out_csv', hint: 'fr_out_csv_hint', Icon: Table2, formats: [['csv', 'CSV', downloadCsv]], needDesign: true },
+  { id: 'quantities', title: 'out_quantities', hint: 'fr_out_qty_hint', Icon: Table2, formats: [['xlsx', 'XLSX', () => void downloadFrameQuantities('xlsx')], ['csv', 'CSV', () => void downloadFrameQuantities('csv')]] },
+  { id: 'csv', title: 'fr_out_csv', hint: 'fr_out_csv_hint', Icon: ClipboardCheck, formats: [['csv', 'CSV', downloadCsv]], needDesign: true },
 ]
 function FrameExportCard({ out, disabled }: { out: FrameOut; disabled: boolean }) {
   const key = `sf_format_${out.id}`
   const [fmt, setFmt] = useState(() => { try { const v = localStorage.getItem(key); return out.formats.find(([f]) => f === v)?.[0] ?? out.formats[0][0] } catch { return out.formats[0][0] } })
   const pick = (f: string) => { setFmt(f); try { localStorage.setItem(key, f) } catch { /* private mode */ } }
-  const off = disabled || (!!out.needDesign && !F.design)
+  const off = disabled || (!!out.needDesign && !F.design) || (!!out.needAnalysis && !F.analysis)
   return <div className="report-export">
     <div className="report-export-head"><out.Icon size={22} /><strong>{t(out.title)}</strong></div>
     <p className="pe-tip">{t(out.hint)}</p>

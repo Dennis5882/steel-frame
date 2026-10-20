@@ -96,3 +96,11 @@ DELETE /db/MATL/9                            → 재료 9만 삭제
 
 - 2026-10-19 20:24경 `moa-engineers.midasit.com` 중계가 모든 요청에 `502 Proxy Error`를 냈다(`/mapikey/verify` 포함). Gen 프로세스와 창은 정상이었다.
 - 다른 프로그램이 같은 Gen·키를 쓰는 중일 수 있으므로, 라이브 검증 전에 확인하고 그런 경우 사용자에게 먼저 묻는다(CLAUDE.md 규칙).
+
+## 8. 화면 캡처 (`/view/CAPTURE`, `/view/RESULTGRAPHIC`) — 라이브 2026-10-20
+
+- `/view/CAPTURE`는 응답에 이미지를 싣지 않는다(`command complete`만). PNG 는 `EXPORT_PATH`(Gen PC 경로)에만 쓴다. 웹 앱이 읽으려면 같은 PC 에서 사용자가 그 폴더를 골라 허용해야 한다(File System Access, Chrome·Edge) — `src/lib/genFolder.ts`.
+- 같은 호출에 `ANGLE`(평면 H 0·V 90, 정면 H 0·V 0, 측면 H 90·V 0), `ACTIVE`(`Identity`+`STORY` 층 하나, `Active`+`E_LIST`·`N_LIST` 골조선), `SET_HIDDEN`(은선 입체), `SET_MODE` pre/post, `ZOOM_LEVEL 100`(전체 맞춤)을 넘길 수 있다.
+- 결과 그림은 `/view/RESULTGRAPHIC` 으로 바꾼 뒤 같은 객체를 `RESULT_GRAPHIC` 에도 넘긴다. 되는 `CURRENT_MODE`: `reactionforces/moments`, `displacementcontour`(COMP `DXYZ`), `beamdiagrams`(COMP `My`·`Fx`), `beamstresses`(COMP `Combined`). `TYPE_OF_DISPLAY` 에 `LEGEND`·`CONTOUR`·`VALUES{MINMAX_ONLY}` 를 주면 예제 docx 와 같은 범례가 찍힌다. 조합은 `LOAD_CASE_COMB {TYPE:'CB', NAME}`.
+- 안 되는 것: 진형도 — `VibrationModeShapes`·`vibrationmodeshapes` 에 `Mode1`/`Mode 1`/TYPE `EIGEN` 모두 'Invalid Post Mode' 또는 'second query is wrong'. `deformedshape` 는 오류 없이 변형 없음. `DISPLAY.PROPERTY.PROPERTY_NAME` 은 글자가 겹쳐 쓸 수 없다.
+- 한 장 실패가 나머지를 막지 않게 장별로 잡고, 끝에 ISO 전체 보기로 되돌린다(`src/frame/run.ts captureGen`).

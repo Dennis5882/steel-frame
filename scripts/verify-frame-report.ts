@@ -22,13 +22,19 @@ import { framePayloads } from '../src/frame/gen'
 import { designMembers, hSection, runFrameDesign } from '../src/frame/design'
 import { overturning, storyReview } from '../src/frame/story'
 import { frameCombos } from '../src/frame/loads'
+import { captureShots, comboName } from '../src/frame/captures'
+import { captureGen } from '../src/frame/run'
 import { buildFrameDrawingSvgs, buildFrameDxf, elevationLines, frameSchedule } from '../src/frame/drawings'
+import { xlsxParts } from '../src/report/xlsx'
 import { OPT_TARGET, candidatesFor, frameWeight, optIter, pickBest, proposeSections, type FrameOptIter } from '../src/frame/optimize'
 import type { ElementForces } from '../src/frame/results'
 import type { FrameAnalysis } from '../src/frame/run'
 
 ;(globalThis as any).document = { documentElement: { lang: 'ko', dataset: {} } }
 const { buildFrameReport } = await import('../src/frame/report')
+const { frameQuantities } = await import('../src/frame/quantities')
+const { frameQuantitySheet } = await import('../src/frame/quantitySheet')
+const { quantityCsv } = await import('../src/report/quantitySheet')
 const { setLang, t } = await import('../src/i18n')
 pdfMake.setLocalAccessPolicy((path) => path.startsWith(resolve('public/fonts')))
 pdfMake.setUrlAccessPolicy(() => false)
@@ -216,6 +222,65 @@ for (const lang of ['ko', 'en', 'zh-CN', 'zh-TW'] as const) {
   const x = optIter(0, spec, model, review, design)
   ok(x.ng === design.members.filter((m) => m.ratio > 1 || m.detailRatio > 1).length && x.ng === 48 && x.driftOk, 'optIter: 48 brace NG, drift OK (tutorial)')
   near(x.weight, frameWeight(model), 1e-12, 'optIter weight')
+}
+
+/* 7) 물량 산출서 — kg/m·도장 둘레 독립 계산, 층별 합 = 부재 합, Excel·CSV 내용 */
+{
+  setLang('ko')
+  const q = frameQuantities(model)
+  for (const r of q.rows) {
+    const h = hSection(r.section)
+    near(r.kgPerM, h.A * 7.85e-3, 1e-9, `${r.section} kg/m = A·ρ`)
+    near(r.paint, (2 * h.d + 4 * h.bf - 2 * h.tw) / 1000 * r.length, 1e-9, `${r.section} paint = (2d + 4b − 2tw)·L`)
+  }
+  near(q.byStory.reduce((a, s) => a + s.t.column + s.t.beam + s.t.brace, 0), q.memberT, 1e-9, 'storey weights sum to member weight')
+  ok(q.byStory.length === 4, 'four storeys')
+  near(q.orderT, q.memberT * 1.05, 1e-12, 'order weight = members × 1.05')
+  near(q.grossArea, model.floorArea * 4, 1e-9, 'gross area = floor area × 4 levels')
+  const sheet = frameQuantitySheet(spec, q), parts = xlsxParts(sheet), xml = parts['xl/worksheets/sheet1.xml']
+  ok(xml.includes(t('fr_q_title')) && xml.includes('HW 150x150x7/10') && xml.includes(`<v>${q.memberT.toFixed(3)}</v>`), 'xlsx: title, sections, total weight as a number cell')
+  ok(/s="2"/.test(xml) && /s="1"/.test(xml), 'xlsx: title and header styles')
+  const csv = quantityCsv(sheet)
+  ok(csv.startsWith('﻿') && csv.includes(t('fr_q_by_story')), 'csv: BOM and storey table')
+}
+
+/* 8) 상세 계산서 — 캡처 목록, 캡처 실행(가짜 Gen), Gen 그림(PNG data URL)·Gen 표가 Word·PDF 에 들어감 */
+{
+  const shots = captureShots(spec, model, design)
+  ok(shots.map((x) => x.key).join(',') === 'model_iso,model_solid,plan,elev_XC,elev_XE,elev_Y5,reaction,displacement,moment,axial,stress', `capture list ${shots.map((x) => x.key).join(',')}`)
+  const elev = shots.find((x) => x.key === 'elev_XC')!.capture.ACTIVE as { E_LIST: number[] }
+  ok(elev.E_LIST.every((id) => { const e = model.elements.find((x) => x.id === id)!; const ns = [e.n1, e.n2].map((n) => model.nodes.find((x) => x.id === n)!); return ns.every((n) => Math.abs(n.y - 8) < 1e-9) }), 'grid C elevation activates only elements on y = 8')
+  ok(comboName('sLCB30(max)') === 'sLCB30' && (shots.find((x) => x.key === 'moment')!.resultGraphic!.LOAD_CASE_COMB as any).NAME === comboName(design.byRole.beam!.worst.combo), 'moment diagram uses the governing beam combination')
+  const calls: [string, any][] = []
+  const fake = async (_m: string, path: string, body?: any) => {
+    calls.push([path, body])
+    if (path === '/view/RESULTGRAPHIC' && body.Argument.CURRENT_MODE === 'beamstresses') throw new Error('Invalid Post Mode')
+    return { message: 'MIDAS GEN NX command complete' }
+  }
+  const res = await captureGen(fake as any, shots, 'C:/temp', 'T')
+  ok(res.length === shots.length && res.filter((r) => !r.ok).map((r) => r.key).join() === 'stress', 'one failed capture is recorded, the rest continue')
+  ok(calls.at(-1)![0] === '/view/CAPTURE' && calls.at(-1)![1].Argument.SET_MODE === undefined && calls.at(-1)![1].Argument.ZOOM_LEVEL === 100, 'ends with ISO zoom fit')
+  ok(calls.filter(([p]) => p === '/view/CAPTURE').every(([, b]) => /^C:\/temp\/sf_cap_T_/.test(b.Argument.EXPORT_PATH)), 'captures go to the save folder')
+  let threw = false
+  try { await captureGen((async () => { throw new RangeError('cancel') }) as any, shots, 'C:/temp', 'T', { fatal: (e) => e instanceof RangeError }) } catch { threw = true }
+  ok(threw, 'fatal (cancel) error is rethrown')
+  /* 상세 계산서 HTML → Word·PDF: Gen PNG 와 Gen 원본 표 */
+  setLang('ko')
+  const png = `data:image/png;base64,${Buffer.from(PNG).toString('base64')}`
+  const gen = { figures: shots.filter((x) => x.key !== 'stress').map((x) => ({ key: x.key, section: x.section, caption: x.key, src: png, width: 1200, height: 900 })), failed: ['stress'] }
+  const html = buildFrameReport({ ...full, gen })
+  ok(html.includes(t('rp_title_detail')) && html.includes(t('rp_gen_t_drift', 'RX')) && html.includes(t('rp_gen_t_torsion', 'RY')) && html.includes(t('rp_gen_failed', 'stress')), 'detailed report: title, Gen tables, missing capture noted')
+  const doc = new DOMParser().parseFromString(html, 'text/html') as any
+  const word = await reportDocxDocument(doc as unknown as Document, (el) => new XMLSerializer().serializeToString(el as any), async () => null)
+  const zip = await JSZip.loadAsync(await Packer.toBuffer(word)), xml = await zip.file('word/document.xml')!.async('string')
+  ok((xml.match(/<w:drawing>/g) ?? []).length === gen.figures.length, `Word embeds the ${gen.figures.length} Gen PNG figures`)
+  ok(Object.keys(zip.files).filter((f) => f.startsWith('word/media/')).length >= 1, 'Word media part present')
+  const font = resolve('public/fonts', reportFontFile('ko'))
+  pdfMake.addFonts({ Report: { normal: font, bold: font, italics: font, bolditalics: font } })
+  const def = reportPdfDefinition(doc as unknown as Document, (el) => new XMLSerializer().serializeToString(el as any))
+  ok(JSON.stringify(def.content).includes('"image":"data:image/png;base64,'), 'PDF definition carries the Gen PNG images')
+  const pdf = await PDFDocument.load(await pdfMake.createPdf(def).getBuffer())
+  ok(pdf.getPageCount() > 30, 'detailed PDF renders')
 }
 
 console.log(`Frame report/drawings/optimisation: ${checks} checks passed (4 languages PDF + Word, ${elevationLines(spec).length + 2} drawing sheets, OTM, lightest sections)`)

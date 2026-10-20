@@ -8,6 +8,7 @@ import { buildFrame } from './geometry'
 import { designMembers, runFrameDesign, type FrameDesign } from './design'
 import { fetchElementForces, n, reactionSums, rows, table, type ElementForces, type Request } from './results'
 import { parseEigen, storyReview, type StoryItem, type StoryTables } from './story'
+import { CAPTURE_SIZE, captureFile, type CaptureShot } from './captures'
 import type { FrameModel, FrameSpec } from './types'
 
 export const GEN_OK = 'MIDAS GEN NX command complete'
@@ -39,6 +40,18 @@ export async function sendFrame(req: Request, P: FramePayloads, model: FrameMode
 
 export async function analyze(req: Request): Promise<void> {
   expectOk(await req('POST', '/doc/anal', {}), 'doc/anal')
+}
+
+/** Gen 화면을 ISO 전체 보기로 (Steel 앱 build.ts 와 같은 방법). view/ANGLE 은 각도만 바꾸고 확대는 그대로라 doc/new 직후 원점 근처가
+    크게 확대된 채 남는다. 맞춤 전용 API 는 없고 view/CAPTURE 의 ZOOM_LEVEL 100(Zoom Fit)이 캡처 뒤에도 화면에 남는다(라이브 2026-10-19,
+    Steel 앱). 작은 PNG 하나가 저장 폴더에 남는다. 화면 조작이라 실패해도 모델 생성은 성공으로 둔다 — 취소 플래그는 다음 호출에서 다시 걸린다 */
+export const VIEW_CALLS = 2
+export async function fitView(req: Request, pngPath: string): Promise<boolean> {
+  try {
+    await req('POST', '/view/ANGLE', { Argument: { HORIZONTAL: 30, VERTICAL: 15 } })
+    await req('POST', '/view/CAPTURE', { Argument: { EXPORT_PATH: pngPath, WIDTH: 400, HEIGHT: 300, ZOOM_LEVEL: 100 } })
+    return true
+  } catch { return false }
 }
 
 export interface Equilibrium { gen: number; app: number }
@@ -112,10 +125,11 @@ export const equilibriumError = (e: Equilibrium) => Math.abs(e.gen - e.app) / Ma
 export interface FrameRound { spec: FrameSpec; model: FrameModel; P: FramePayloads; counts: SendCounts; analysis: FrameAnalysis; forces: ElementForces; review: StoryItem[]; design: FrameDesign }
 
 /** 최적화 한 회 — 화면(actions/frame.ts)과 scripts/live-frame.ts --opt 공용. save = 전송 뒤 문서 저장(해석 확인 창 방지), stage = 진행 표시 */
-export async function runRound(req: Request, spec: FrameSpec, o: { save(): Promise<void>; stage?(key: 'st_send' | 'st_anal' | 'st_results' | 'st_check', calls: number): void; log?(m: string): void; onSent?(model: FrameModel, P: FramePayloads, counts: SendCounts): void }): Promise<FrameRound> {
+export async function runRound(req: Request, spec: FrameSpec, o: { save(): Promise<void>; viewPath?: string; stage?(key: 'st_send' | 'st_anal' | 'st_results' | 'st_check', calls: number): void; log?(m: string): void; onSent?(model: FrameModel, P: FramePayloads, counts: SendCounts): void }): Promise<FrameRound> {
   const model = buildFrame(spec), P = framePayloads(spec, model)
-  o.stage?.('st_send', SEND_CALLS)
+  o.stage?.('st_send', SEND_CALLS + (o.viewPath ? VIEW_CALLS : 0))
   const counts = await sendFrame(req, P, model)
+  if (o.viewPath) await fitView(req, o.viewPath)
   o.onSent?.(model, P, counts)
   o.stage?.('st_anal', 2)
   await o.save()
@@ -128,4 +142,25 @@ export async function runRound(req: Request, spec: FrameSpec, o: { save(): Promi
   const review = storyReview(spec, model, analysis.story, analysis.colStrongAxis)
   const design = runFrameDesign(spec, designMembers(spec, model, analysis.colStrongAxis), forces, P.combos.map((c) => ({ name: c.name, seismic: c.seismic })))
   return { spec, model, P, counts, analysis, forces, review, design }
+}
+
+/** 상세 계산서 캡처 — 결과 그래픽 전환 → CAPTURE (dir 는 Gen PC 경로). 한 장 실패는 기록만 하고 계속, fatal(e) 이면 바로 던짐(취소).
+    끝나면 ISO 전체·전처리 모드로 되돌린다. 반환: 장별 파일명·성공 여부 */
+export async function captureGen(req: Request, shots: CaptureShot[], dir: string, stamp: string,
+  o: { fatal?(e: unknown): boolean; onShot?(i: number, n: number, key: string): void } = {}): Promise<{ key: string; file: string; ok: boolean; error?: string }[]> {
+  const out: { key: string; file: string; ok: boolean; error?: string }[] = []
+  for (const [i, s] of shots.entries()) {
+    o.onShot?.(i, shots.length, s.key)
+    const file = captureFile(stamp, s.key)
+    try {
+      if (s.resultGraphic) await req('POST', '/view/RESULTGRAPHIC', { Argument: s.resultGraphic })
+      expectOk(await req('POST', '/view/CAPTURE', { Argument: { EXPORT_PATH: `${dir}/${file}`, ...CAPTURE_SIZE, ZOOM_LEVEL: 100, ...s.capture, ...(s.resultGraphic ? { RESULT_GRAPHIC: s.resultGraphic } : {}) } }), `capture ${s.key}`)
+      out.push({ key: s.key, file, ok: true })
+    } catch (e) {
+      if (o.fatal?.(e)) throw e
+      out.push({ key: s.key, file, ok: false, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+  await fitView(req, `${dir}/${captureFile(stamp, 'end')}`)
+  return out
 }

@@ -81,6 +81,15 @@ export async function reportDocxDocument(doc: Document_, serialize: (el: Element
         const png = await rasterize(serialize(copy), dw, dh)
         if (png) out.push(new Paragraph({ alignment: AlignmentType.CENTER, keepNext: true, children: [new ImageRun({ type: 'png', data: png.data, transformation: { width: dw, height: dh } })] }))
       }
+      /* 래스터 그림 (data URL <img width height>) — 골조 앱 상세 계산서의 Gen NX 캡처. 공장 앱 계산서에는 없음(추가만) */
+      const img = svg ? undefined : el.getElementsByTagName('img')[0]
+      const m = img && /^data:image\/(png|jpe?g);base64,(.+)$/.exec(img.getAttribute('src') ?? '')
+      if (img && m) {
+        const w = Number(img.getAttribute('width')) || 640, h = Number(img.getAttribute('height')) || 480
+        const fit = Math.min(PAGE_WIDTH_PX / w, 640 / h), dw = Math.round(w * fit), dh = Math.round(h * fit)
+        const data = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0))
+        out.push(new Paragraph({ alignment: AlignmentType.CENTER, keepNext: true, children: [new ImageRun({ type: m[1] === 'png' ? 'png' : 'jpg', data, transformation: { width: dw, height: dh } })] }))
+      }
       if (cap) out.push(new Paragraph({ style: 'Caption', alignment: AlignmentType.CENTER, children: [new TextRun(cap)] }))
       return out
     }
