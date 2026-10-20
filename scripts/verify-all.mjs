@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process'
 
 const SUITES = [
   ['Frame (CN tutorial)', 'verify-frame.ts'],
+  ['Frame report / drawings / optimisation', 'verify-frame-report.ts'],
   ['Crane operating range', 'verify-crane-travel.ts'],
   ['Modeling structure flow', 'verify-modeling-flow.ts'],
   ['Gen property source', 'verify-gen-section-source.ts'],

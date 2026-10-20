@@ -72,7 +72,7 @@ export function FrameView3D() {
         scene: {
           aspectmode: 'data',
           xaxis: ax(c === 'side', 'X (m)'), yaxis: ax(c === 'front', 'Y (m)'), zaxis: ax(c === 'top', 'Z (m)'),
-          camera: { eye: { x: e.x * 0.85, y: e.y * 0.85, z: e.z * 0.85 }, up: CAMS[c].up ?? { x: 0, y: 0, z: 1 }, projection: { type: c === 'iso' ? 'perspective' : 'orthographic' } },
+          camera: { eye: { x: e.x * 1.15, y: e.y * 1.15, z: e.z * 1.15 }, up: CAMS[c].up ?? { x: 0, y: 0, z: 1 }, projection: { type: c === 'iso' ? 'perspective' : 'orthographic' } },
         },
       } as any, { responsive: true, displaylogo: false, displayModeBar: true, modeBarButtonsToRemove: ['resetCameraLastSave3d', 'hoverClosest3d'], toImageButtonOptions: { format: 'png', filename: 'steel_frame_3d', scale: 2 } } as any)
     })

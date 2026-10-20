@@ -6,13 +6,15 @@
    - 剪重比       GB 50011 5.2.5 표5.2.5 λ_min (T1 < 3.5 s)
    - 质量比       JGJ 3-2010 3.5.6 (참고): 楼层质量 ≤ 1.5 × 아래층
    - 二阶效应     GB 50017-2017 5.1.6: θ = ΣN·Δu/(ΣH·h) ≤ 0.1 이면 1차 해석 허용
-   - 有效质量     GB 50011 5.2.2 条文说明: 누적 ≥ 90% (EIGENVALUEMODE 참여질량) */
+   - 有效质量     GB 50011 5.2.2 条文说明: 누적 ≥ 90% (EIGENVALUEMODE 참여질량)
+   - 倾覆弯矩     판정 없는 결과 표: Gen OVERTURNING_MOMENT(RS) + 앱 ΣV·h (층전단 × 층고 누적, 6.1.3 条文说明의 框架 Mc 정의).
+                  라이브(2026-10-20): 머리글 Angle1·Frame/Wall(Value·Ratio)·Angle2·Frame/Wall 반복, Gen 값 = ΣV·h (0.1 kN·m 이내) */
 import { bucklingPhi } from '../codes/cnSteel'
 import { cnFrameStrength, curvesOf } from '../codes/cnFrameSteel'
 import { hSection } from './design'
 import { elementLength } from './geometry'
 import { LAMBDA_MIN } from './loads'
-import { n } from './results'
+import { n, type TableData } from './results'
 import type { FrameModel, FrameSpec } from './types'
 
 export type StoryStatus = 'ok' | 'warn' | 'ng' | 'na'
@@ -24,6 +26,8 @@ export interface StoryTables {
   mass?: Rows; shearX?: Rows; shearY?: Rows; driftX?: Rows; driftY?: Rows; dispX?: Rows; dispY?: Rows
   stiffX?: Rows; stiffY?: Rows; torsionX?: Rows; torsionY?: Rows
   eigen?: { periods: number[]; massX: number[]; massY: number[] } | null
+  /** OVERTURNING_MOMENT 원본 표 (RX·RY) */
+  otmX?: TableData; otmY?: TableData
 }
 
 const worst = (rows: StoryRow[]): StoryStatus => rows.some((r) => r.status === 'ng') ? 'ng' : rows.some((r) => r.status === 'warn') ? 'warn' : rows.length ? 'ok' : 'na'
@@ -161,4 +165,48 @@ export function storyReview(spec: FrameSpec, model: FrameModel, t: StoryTables, 
     items.push({ key: 'effMass', clause: 'GB/T 50011 5.2.2', rows, status: worst(rows) })
   } else items.push({ key: 'effMass', clause: 'GB/T 50011 5.2.2', rows: [], status: 'na' })
   return items
+}
+
+export interface OtmRow { story: string; gen: Record<'X' | 'Y', number | null>; app: Record<'X' | 'Y', number | null> }
+
+/** 倾覆弯矩 표의 한 행 → 층 밑 전도모멘트 (kN·m). 각도마다 Frame(+Wall) 열이 반복 → 각도별 합의 최대 절댓값 */
+function otmValue(head: string[], row: string[]): number | null {
+  const groups: number[][] = []
+  head.forEach((h, i) => {
+    if (!/Overturning Moment/i.test(h) || !/\/Value$/i.test(h)) return
+    if (/\/Frame\//i.test(h) || !groups.length) groups.push([i])
+    else groups[groups.length - 1].push(i)
+  })
+  let best: number | null = null
+  for (const g of groups) {
+    const vals = g.map((i) => Number(row[i])).filter(Number.isFinite)
+    if (!vals.length) continue
+    const v = Math.abs(vals.reduce((a, b) => a + b, 0))
+    best = best === null ? v : Math.max(best, v)
+  }
+  return best
+}
+
+/** 층별 전도모멘트 — Gen 표(있으면)와 앱 ΣV·h (위층부터 층전단 × 층고 누적) */
+export function overturning(spec: FrameSpec, t: StoryTables): OtmRow[] {
+  const names = storyOrder(spec), h = spec.heights
+  const app: Record<'X' | 'Y', (number | null)[]> = { X: [], Y: [] }
+  for (const dir of ['X', 'Y'] as const) {
+    const sh = new Map(((dir === 'X' ? t.shearX : t.shearY) ?? []).map((r) => [r.Story, r]))
+    let acc: number | null = 0
+    for (let i = names.length - 1; i >= 0; i--) {
+      const r = sh.get(names[i])
+      acc = acc !== null && r ? acc + Math.abs(n(r[`Shear Force/${dir}`])) * h[i] : null
+      app[dir][i] = acc
+    }
+  }
+  const gen = (tb: TableData | undefined) => {
+    const out = new Map<string, number | null>()
+    if (!tb?.HEAD) return out
+    const si = tb.HEAD.indexOf('Story')
+    for (const r of tb.DATA) if (si >= 0) out.set(r[si], otmValue(tb.HEAD, r))
+    return out
+  }
+  const gx = gen(t.otmX), gy = gen(t.otmY)
+  return names.map((nm, i) => ({ story: nm, gen: { X: gx.get(nm) ?? null, Y: gy.get(nm) ?? null }, app: { X: app.X[i], Y: app.Y[i] } })).reverse()
 }

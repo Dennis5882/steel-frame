@@ -15,7 +15,7 @@ import { framePayloads } from '../src/frame/gen'
 import type { ElementForces } from '../src/frame/results'
 import { FRAME_TEMPLATES } from '../src/frame/templates'
 import { frameSectionNames } from '../src/frame/sections'
-import { PLAN_SHAPES, braceBays, planConnected, setGrid, setPanel, shapeFits, shapeRemoved, toggleBrace } from '../src/frame/plan'
+import { PLAN_SHAPES, braceBays, deleteSpan, formatSpans, insertSpan, parseSpans, planConnected, setGrid, setPanel, setPanelState, shapeFits, shapeRemoved, toggleBrace, triNext } from '../src/frame/plan'
 
 let checks = 0
 const ok = (cond: unknown, msg: string) => { assert.ok(cond, msg); checks++ }
@@ -46,8 +46,8 @@ for (const [k, tp] of Object.entries(FRAME_TEMPLATES)) {
   ok(Object.values(tp.spec.sections).every((n) => names.has(n)), `template ${k} sections in GB-YB05 list`)
   ok(tp.spec.design.braced.X === tp.spec.braces.some((b) => b.axis === 'X') && tp.spec.design.braced.Y === tp.spec.braces.some((b) => b.axis === 'Y'), `template ${k}: braced flags follow brace directions`)
 }
-{ const mt = FRAME_TEMPLATES.moment.spec, cols = designMembers(mt, buildFrame(mt)).filter((x) => x.role === 'column')
-  ok(cols.every((c) => c.muX >= 1 && c.muY >= 1), 'moment frame columns use sway μ ≥ 1 (E.0.2)') }
+{ const mt = FRAME_TEMPLATES.blank.spec, cols = designMembers(mt, buildFrame(mt)).filter((x) => x.role === 'column')
+  ok(cols.every((c) => c.muX >= 1 && c.muY >= 1), 'new frame (no braces) columns use sway μ ≥ 1 (E.0.2)') }
 
 /* 적설 (GB 50009 5.3.3·7.1.1, GB 55001 3.1.13, GB/T 50011 5.1.3) — s0 = 0 이면 예제 그대로, 있으면 S 케이스·조합 추가 */
 ok(!('5' in (P.STLD as object)) && P.combos.every((c) => c.terms.every(([k]) => k !== 'S' && k !== 'LF')), 'no snow: no SL/LF case, 34 Gen combos unchanged')
@@ -82,13 +82,44 @@ for (const [n, m] of [[4, 4], [5, 3], [6, 6], [3, 5], [7, 5]]) for (const sh of 
   setGrid(sp, [0, 7, 14, 21], sp.ys)
   ok(sp.braces.every((b: any) => b.axis !== 'Y' || b.line <= 21) && braceBays(sp).every((b) => b.i < 3 || b.axis === 'Y'), 'removing a span drops brace bays beyond the grid')
   const sq = JSON.parse(JSON.stringify(spec)); setPanel(sq, 2, 3, false); setPanel(sq, 3, 3, false)
-  ok(braceBays(sq).length === 6, 'removing panels keeps braces until pruned')
+  ok(braceBays(sq).length === 5 && buildFrame(sq).elements.every((e) => e.role !== 'brace' || e.line !== 16 || e.n1 > 0), 'removing panels drops the brace bay whose beam disappeared (E-line 3–4)')
   const sr = JSON.parse(JSON.stringify(spec)); toggleBrace(sr, 'X', 0, 4); ok(braceBays(sr).length === 7, 'toggle adds a bay on an existing edge')
   toggleBrace(sr, 'X', 0, 4); ok(braceBays(sr).length === 6, 'toggle again removes it')
   toggleBrace(sr, 'X', 0, 0); ok(braceBays(sr).length === 6, 'no brace on an edge outside the plan (L-shape void)')
   const sd = JSON.parse(JSON.stringify(spec)); sd.removed = [[1, 0], [1, 1], [1, 2], [1, 3]]
   ok(!planConnected(sd), 'a full-height removed column of panels splits the plan → rejected')
 }
+
+/* 삼각 패널 손계산: 2×2 격자(6 m), 패널(1,1)의 우상(NE) 모서리를 잘라냄 → 격자점 (2,2) 없음, 대각선 보, 삼각 바닥 */
+{
+  const sp = JSON.parse(JSON.stringify(spec)); sp.xs = [0, 6, 12]; sp.ys = [0, 6, 12]; sp.removed = []; sp.braces = []; sp.heights = [4]; sp.storyNames = ['1F', 'Roof']
+  setPanelState(sp, 1, 1, 2)
+  const md = buildFrame(sp), top = md.nodes.filter((nd) => nd.level === 1)
+  ok(top.length === 8 && !top.some((nd) => nd.x === 12 && nd.y === 12), 'triangle cut: cut corner node removed (8 nodes per level)')
+  ok(md.floorArea === 3 * 36 + 18, `triangle cut: area ${md.floorArea} = 3·36 + 18`)
+  near(md.perimeter, 12 + 12 + 6 + 6 + Math.hypot(6, 6), 1e-6, 'triangle cut: perimeter incl. diagonal')
+  const dia = md.elements.filter((e) => e.diagonal)
+  ok(dia.length === 1 && dia[0].edge && Math.abs(Math.hypot(...(['x', 'y'] as const).map((c) => md.nodes[dia[0].n1 - 1][c] - md.nodes[dia[0].n2 - 1][c])) - Math.hypot(6, 6)) < 1e-9, 'triangle cut: one diagonal perimeter beam (12,6)–(6,12)')
+  ok(md.floorRegions.filter((r) => r.nodes.length === 3).length === 1 && md.supports.length === 8, 'triangle cut: 3-node floor region, 8 columns')
+  toggleBrace(sp, 'Y', 2, 1); ok(braceBays(sp).length === 0, 'no brace on the side removed by the cut')
+  const gs = gravityTotals(sp, md); ok(Math.abs(gs.ll - 126 * 0.5) < 1e-9, 'roof live on triangle area')
+}
+/* 스팬 삽입·삭제: 형상·가새가 번호를 따라 이동, 삽입 후 같은 자리 삭제 = 원래대로 */
+{
+  const sp = JSON.parse(JSON.stringify(spec)), key0 = JSON.stringify([sp.xs, [...sp.removed].sort(), braceBays(sp).map((b) => `${b.axis}${b.i},${b.j}`).sort()])
+  insertSpan(sp, 'X', 2, 7.5)
+  ok(sp.xs.join() === '0,6,12,19.5,25.5,31.5' && buildFrame(sp).floorArea === 288 + 7.5 * 16, 'insert X span 7.5 m at 2 (full-height column of panels)')
+  ok(braceBays(sp).length === 6 && braceBays(sp).some((b) => b.axis === 'Y' && b.i === 5), 'braces follow inserted span (Y line 5 → index 5)')
+  deleteSpan(sp, 'X', 2)
+  ok(JSON.stringify([sp.xs, [...sp.removed].sort(), braceBays(sp).map((b) => `${b.axis}${b.i},${b.j}`).sort()]) === key0, 'delete the inserted span → original plan')
+  const sq = JSON.parse(JSON.stringify(spec)); insertSpan(sq, 'Y', 0, 4)
+  ok(sq.removed.length === 6 && planConnected(sq) && buildFrame(sq).floorArea === 288 + 4 * 12, 'insert Y span at 0 copies the neighbouring row state (L-shape grows)')
+}
+/* 삼각 도구 규칙: 빈 칸 → 누른 모서리를 포함하는 삼각형, 전체 → 그 모서리 자름, 삼각 → 잘린 모서리 복구 / 직각 모서리 지움 / 대각선 끝 돌림 */
+ok(triNext('off', 0) === 2 && triNext('full', 1) === 1 && triNext(3, 3) === 'full' && triNext(3, 1) === 'off' && triNext(3, 0) === 0, 'triangle tool transitions')
+{ const sp = JSON.parse(JSON.stringify(spec)); setPanelState(sp, 1, 1, triNext('off', 3))
+  const md = buildFrame(sp); ok(md.floorArea === 288 + 12 && planConnected(sp) && md.elements.filter((e) => e.diagonal).length === 4, 'triangle added on an empty L-corner cell (keeps NW, joins the plan)') }
+ok(JSON.stringify(parseSpans('4@6, 8')) === '[6,6,6,6,8]' && parseSpans('6,,x') === null && formatSpans([6, 6, 6, 8, 8]) === '3@6, 2@8', 'span shorthand n@L')
 
 /* 2) 원문 대조 */
 const E01: [number, number, number][] = [[0, 0, 1], [0.05, 0, 0.99], [1, 1, 0.774], [0.5, 10, 0.685], [2, 3, 0.663], [10, 10, 0.549], [0.3, 0.2, 0.916]]

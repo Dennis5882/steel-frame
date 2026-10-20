@@ -28,19 +28,23 @@ export function designMembers(spec: FrameSpec, model: FrameModel, colStrongAxis:
   const memberLen = (els: FrameElement[]) => els.reduce((a, e) => a + elementLength(model, e), 0)
 
   /* 절점에 모이는 보(부재 단위)·기둥 강성 */
-  const beamAt = new Map<number, { axis: 'X' | 'Y'; k: number }[]>()
+  /* 보 강성을 골조 방향 성분으로: 축 방향 보는 그 방향 1, 삼각 패널 대각선 보는 방향 코사인² (cos²θ + sin²θ = 1) 로 X·Y 에 나눔 */
+  const beamAt = new Map<number, { X: number; Y: number }[]>()
+  const nodeOf = new Map(model.nodes.map((n) => [n.id, n]))
   for (const els of byMember.values()) {
     if (els[0].role !== 'beam') continue
     const L = memberLen(els), sec = hSection(els[0].section), k = sec.Ix / (L * 1000)
     const ends = [els[0].n1, els[els.length - 1].n2]
-    for (const nd of ends) (beamAt.get(nd) ?? beamAt.set(nd, []).get(nd)!).push({ axis: els[0].axis!, k })
+    const a = nodeOf.get(ends[0])!, b = nodeOf.get(ends[1])!, dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy || 1
+    const share = els[0].axis ? { X: els[0].axis === 'X' ? k : 0, Y: els[0].axis === 'Y' ? k : 0 } : { X: k * dx * dx / l2, Y: k * dy * dy / l2 }
+    for (const nd of ends) (beamAt.get(nd) ?? beamAt.set(nd, []).get(nd)!).push(share)
   }
   const colsAt = new Map<number, FrameElement[]>()
   for (const e of model.elements) if (e.role === 'column') for (const nd of [e.n1, e.n2]) (colsAt.get(nd) ?? colsAt.set(nd, []).get(nd)!).push(e)
   const supports = new Set(model.supports)
   const K = (node: number, axis: 'X' | 'Y', strong: boolean) => {
     if (supports.has(node)) return 10
-    const kb = (beamAt.get(node) ?? []).filter((b) => b.axis === axis).reduce((a, b) => a + b.k, 0)
+    const kb = (beamAt.get(node) ?? []).reduce((a, b) => a + b[axis], 0)
     const kc = (colsAt.get(node) ?? []).reduce((a, c) => { const s = hSection(c.section); return a + (strong ? s.Ix : s.Iy) / (elementLength(model, c) * 1000) }, 0)
     return kc > 0 ? kb / kc : 0
   }
@@ -70,6 +74,9 @@ export interface MemberDesign extends DesignMember {
   /** 구조 규정 (세장비·판폭두께비) 최대 비 */
   detailRatio: number
 }
+
+/** 한계 초과 (강도·안정 또는 구조 규정) — 화면·최적화·계산서·스크립트 공통 판정 */
+export const memberFails = (m: Pick<MemberDesign, 'ratio' | 'detailRatio'>) => m.ratio > 1 || m.detailRatio > 1
 
 export interface FrameDesign {
   members: MemberDesign[]

@@ -2,7 +2,7 @@
    人자형 가새는 아래층 양 기둥 하단 → 위층 보 중앙. 보 중앙에 절점을 넣어 보를 둘로 나누고, 설계 부재는 원래 보 하나(member)로 묶는다.
    예제 검증: 절점 129 · 요소 284 (docs/tutorial-cn-braced-frame.md 1절). */
 import type { FrameElement, FrameModel, FrameNode, FrameSpec } from './types'
-import { planConnected } from './plan'
+import { CORNER_OFF, cornerKept, diagonalOf, edgeExists, edgeIsPerimeter, keptCorners, panelOn, panelState, planConnected } from './plan'
 
 const EPS = 1e-6
 const near = (a: number, b: number) => Math.abs(a - b) < EPS
@@ -13,12 +13,8 @@ export function levelsOf(spec: FrameSpec): number[] {
   return z
 }
 
-/** 패널(i,j) = xs[i]~xs[i+1] × ys[j]~ys[j+1] 존재 여부 */
-export function panelExists(spec: FrameSpec, i: number, j: number): boolean {
-  const { xs, ys } = spec
-  if (i < 0 || j < 0 || i >= xs.length - 1 || j >= ys.length - 1) return false
-  return !spec.removed.some(([a, b]) => a === i && b === j)
-}
+/** 패널(i,j) = xs[i]~xs[i+1] × ys[j]~ys[j+1] 존재 여부 (전체 또는 삼각) — 상태 규칙은 plan.ts */
+export const panelExists = panelOn
 
 export function validateSpec(spec: FrameSpec): string[] {
   const errs: string[] = []
@@ -37,8 +33,8 @@ export function buildFrame(spec: FrameSpec): FrameModel {
   const { xs, ys } = spec
   const nx = xs.length, ny = ys.length
   const levels = levelsOf(spec), ns = spec.heights.length
-  const P = (i: number, j: number) => panelExists(spec, i, j)
-  const gridNode = (i: number, j: number) => P(i - 1, j - 1) || P(i, j - 1) || P(i - 1, j) || P(i, j)
+  /* 격자점은 그 점을 모서리로 가진 패널 중 하나라도 그 모서리를 남기면 생김 (삼각으로 잘린 모서리는 빠짐) */
+  const gridNode = (i: number, j: number) => cornerKept(spec, i - 1, j - 1, 2) || cornerKept(spec, i, j - 1, 3) || cornerKept(spec, i - 1, j, 1) || cornerKept(spec, i, j, 0)
 
   /* 절점: 레벨 → j → i */
   const nodes: FrameNode[] = []
@@ -66,8 +62,8 @@ export function buildFrame(spec: FrameSpec): FrameModel {
       for (let j = j0; j < j1; j++) bracedBays.push({ axis: 'Y', i, j })
     }
   }
-  const edgeX = (i: number, j: number) => P(i, j - 1) || P(i, j) // (i,j)-(i+1,j)
-  const edgeY = (i: number, j: number) => P(i - 1, j) || P(i, j) // (i,j)-(i,j+1)
+  const edgeX = (i: number, j: number) => edgeExists(spec, 'X', i, j) // (i,j)-(i+1,j)
+  const edgeY = (i: number, j: number) => edgeExists(spec, 'Y', i, j) // (i,j)-(i,j+1)
   for (const b of bracedBays) if (!(b.axis === 'X' ? edgeX(b.i, b.j) : edgeY(b.i, b.j))) throw new Error(`brace bay outside plan: ${b.axis} ${b.i},${b.j}`)
 
   /* 보 중앙 절점 (가새 꼭짓점) — 레벨 1..ns */
@@ -99,11 +95,18 @@ export function buildFrame(spec: FrameSpec): FrameModel {
   for (let k = 1; k <= ns; k++) {
     for (let j = 0; j < ny; j++) for (let i = 0; i < nx - 1; i++) {
       if (!edgeX(i, j)) continue
-      beam(k, at.get(key(i, j, k))!, at.get(key(i + 1, j, k))!, 'X', ys[j], P(i, j - 1) !== P(i, j), mid.get(`X${i},${j},${k}`))
+      beam(k, at.get(key(i, j, k))!, at.get(key(i + 1, j, k))!, 'X', ys[j], edgeIsPerimeter(spec, 'X', i, j), mid.get(`X${i},${j},${k}`))
     }
     for (let i = 0; i < nx; i++) for (let j = 0; j < ny - 1; j++) {
       if (!edgeY(i, j)) continue
-      beam(k, at.get(key(i, j, k))!, at.get(key(i, j + 1, k))!, 'Y', xs[i], P(i - 1, j) !== P(i, j), mid.get(`Y${i},${j},${k}`))
+      beam(k, at.get(key(i, j, k))!, at.get(key(i, j + 1, k))!, 'Y', xs[i], edgeIsPerimeter(spec, 'Y', i, j), mid.get(`Y${i},${j},${k}`))
+    }
+    /* 삼각 패널 대각선 보 (항상 외곽) */
+    for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+      const st = panelState(spec, i, j)
+      if (st === 'off' || st === 'full') continue
+      const [c1, c2] = diagonalOf(st), [a1, b1] = CORNER_OFF[c1], [a2, b2] = CORNER_OFF[c2]
+      add({ role: 'beam', n1: at.get(key(i + a1, j + b1, k))!, n2: at.get(key(i + a2, j + b2, k))!, section: spec.sections.beam, story: k, member: ++member, edge: true, diagonal: true })
     }
   }
   /* 가새 — 층 k: 레벨 k-1 의 베이 양 끝 → 레벨 k 의 보 중앙 */
@@ -118,12 +121,20 @@ export function buildFrame(spec: FrameSpec): FrameModel {
   /* 바닥 영역: 패널마다 4 꼭짓점 (FBLA 양방향 분배) */
   const floorRegions: FrameModel['floorRegions'] = []
   let floorArea = 0, perimeter = 0
-  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) if (P(i, j)) floorArea += (xs[i + 1] - xs[i]) * (ys[j + 1] - ys[j])
-  for (let j = 0; j < ny; j++) for (let i = 0; i < nx - 1; i++) if (edgeX(i, j) && P(i, j - 1) !== P(i, j)) perimeter += xs[i + 1] - xs[i]
-  for (let i = 0; i < nx; i++) for (let j = 0; j < ny - 1; j++) if (edgeY(i, j) && P(i - 1, j) !== P(i, j)) perimeter += ys[j + 1] - ys[j]
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    const st = panelState(spec, i, j), dx = xs[i + 1] - xs[i], dy = ys[j + 1] - ys[j]
+    if (st === 'off') continue
+    floorArea += st === 'full' ? dx * dy : dx * dy / 2
+    if (st !== 'full') perimeter += Math.hypot(dx, dy)
+  }
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx - 1; i++) if (edgeX(i, j) && edgeIsPerimeter(spec, 'X', i, j)) perimeter += xs[i + 1] - xs[i]
+  for (let i = 0; i < nx; i++) for (let j = 0; j < ny - 1; j++) if (edgeY(i, j) && edgeIsPerimeter(spec, 'Y', i, j)) perimeter += ys[j + 1] - ys[j]
+  floorArea = +floorArea.toFixed(6); perimeter = +perimeter.toFixed(6)
+  /* 바닥 영역: 패널마다 남은 꼭짓점 (전체 4, 삼각 3) — FBLA 양방향 분배 */
   for (let k = 1; k <= ns; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
-    if (!P(i, j)) continue
-    floorRegions.push({ level: k, nodes: [key(i, j, k), key(i + 1, j, k), key(i + 1, j + 1, k), key(i, j + 1, k)].map((s) => at.get(s)!) })
+    const kept = keptCorners(panelState(spec, i, j))
+    if (!kept.length) continue
+    floorRegions.push({ level: k, nodes: kept.map((c) => at.get(key(i + CORNER_OFF[c][0], j + CORNER_OFF[c][1], k))!) })
   }
   return { nodes, elements, supports, levels, floorRegions, floorArea, perimeter }
 }

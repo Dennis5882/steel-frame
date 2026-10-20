@@ -2,6 +2,7 @@ import { addEn } from './additions'
 import { repairEn } from './repair'
 import { sectionEn } from './sectionPicker'
 import { frameEn } from './frame'
+import { frameReportEn } from './frameReport'
 import { flowEn } from './modelingFlow'
 /* 영어 사전 — 키의 기준(폴백). 다른 언어는 `Dict` 타입으로 키 일치를 컴파일 시점에 검사.
    값이 HTML 인 키(…_html, welcome, 메시지류)는 dangerouslySetInnerHTML 로 렌더 — 사용자 입력을 넣지 말 것. */
@@ -11,6 +12,7 @@ export const en = {
   ...sectionEn,
   ...flowEn,
   ...frameEn,
+  ...frameReportEn,
   bay_mode: 'Spacing mode',
   numeric_wheel_hint: 'Click to focus, then use the wheel or ↑↓ keys to adjust.',
   bay_error: 'Enter a number greater than zero for every bay spacing.',
@@ -540,6 +542,10 @@ export const en = {
   g_help_2: 'Release notes',
   g_help_2_cmd: 'release notes',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_2_0_1: 'Calculation report as PDF, Word or HTML: overview, model, loads and combinations, analysis results, storey checks, GB 50017 member checks with the governing member details, assumptions, and drawings. It can also be exported before the analysis (model and loads only).',
+  rn_v1_2_0_2: 'Simple drawings as A3 PDF or DXF: typical floor framing plan, elevations of the braced frame lines, member schedule with general notes. The overturning moment is read from Gen (OVERTURNING_MOMENT) and shown with the app check ΣV·h; they matched in the live run.',
+  rn_v1_2_0_3: 'Section optimisation: the lightest rolled H per role (ratio ≤ 0.95, detailing limits), recreated and reanalysed in Gen until it converges (up to 5 rounds); cancelling keeps your original sections. Diagonal beams now count in the column effective length factors, and the X/Y spacing switches to unequal by itself when one span is edited.',
+  rn_v1_1_3_1: 'The start page has a single New frame entry (the Gen NX example can still be loaded), and modelling starts at the grid. Grids are set by span count × spacing or lists like 4@6, 8; clicking a dimension on the plan changes, inserts or deletes that span while keeping the shape. A Triangle tool cuts a cell corner along the diagonal, adding a diagonal beam and a triangular floor area.',
   rn_v1_1_2_1: 'The grid step is now a plan editor: click or drag grid cells to add or remove floor panels, or apply a preset shape (rectangle, L, T, cross, U, E, courtyard). Shapes are kept when spans change.',
   rn_v1_1_2_2: 'Chevron braces are placed by clicking beam lines on the plan.',
   rn_v1_1_2_3: 'Roof snow (basic snow pressure s₀, distribution factor μr) is added with GB 55001 combinations; snow is not combined with roof live load (GB 50009 5.3.3). The seismic code is labelled GB/T 50011-2010 (2024 edition), with the mandatory GB 55001/55002/55006 shown.',

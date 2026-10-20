@@ -2,6 +2,7 @@ import { addTW } from './additions'
 import { repairTW } from './repair'
 import { sectionTw } from './sectionPicker'
 import { frameZhTW } from './frame'
+import { frameReportZhTW } from './frameReport'
 import { flowTW } from './modelingFlow'
 import type { Dict } from './en'
 
@@ -12,6 +13,7 @@ export const zhTW: Dict = {
   ...sectionTw,
   ...flowTW,
   ...frameZhTW,
+  ...frameReportZhTW,
   bay_mode: '柱距輸入方式',
   numeric_wheel_hint: '點選後可用滾輪或 ↑↓ 鍵調整數值。',
   bay_error: '請為每一跨間距輸入大於零的數值。',
@@ -526,6 +528,10 @@ export const zhTW: Dict = {
   g_help_2: '版本說明',
   g_help_2_cmd: '版本說明',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_2_0_1: '計算書可匯出 PDF、Word、HTML：概要、模型、載重與組合、分析結果、樓層檢核、含控制構件細節的 GB 50017 構件檢核、假設與圖面。分析前也可匯出（僅模型與載重）。',
+  rn_v1_2_0_2: '簡圖可匯出 A3 PDF、DXF：標準層結構平面、斜撐構架立面、構件表與一般說明。傾覆彎矩讀取 Gen 表（OVERTURNING_MOMENT），並與程式校核值 ΣV·h 並列，實測一致。',
+  rn_v1_2_0_3: '斷面最佳化：依類別選最輕的熱軋 H 型鋼（應力比 ≤ 0.95、符合構造），在 Gen 中重建並分析直至收斂（最多 5 輪）；取消時保留原斷面。斜梁計入柱有效長度係數；修改某一跨後 X/Y 間距自動轉為不等跨。',
+  rn_v1_1_3_1: '開始頁改為單一「新建構架」（仍可載入 Gen NX 例題），建模從格線開始。格線可依跨數 × 間距或 4@6, 8 這樣的清單輸入；點擊平面尺寸可修改、插入或刪除該跨，形狀保持不變。新增三角工具，沿對角線切除區格一角，產生斜梁與三角形樓板。',
   rn_v1_1_2_1: '格線步驟改為平面編輯器：點擊或拖曳方格新增或刪除樓板區格，或套用形狀範本（矩形、L、T、十字、凹形、E、回字形）。修改跨度時形狀保持不變。',
   rn_v1_1_2_2: '人字形斜撐改為在平面中點擊梁線配置。',
   rn_v1_1_2_3: '新增屋頂雪載重（基本雪壓 s₀、積雪分布係數 μr）及 GB 55001 組合，雪載重不與屋頂活載重同時組合（GB 50009 5.3.3）。抗震規範標註改為 GB/T 50011-2010（2024 年版），並顯示強制性規範 GB 55001/55002/55006。',

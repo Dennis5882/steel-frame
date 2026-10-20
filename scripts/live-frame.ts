@@ -1,5 +1,6 @@
 /* 다층 강골조 라이브 실행 — 기준 예제(docs/tutorial-cn-braced-frame.md)를 Gen NX 에 만들고 해석·층 표·부재 검토 후 목표값과 대조.
-   Run: npx tsx scripts/live-frame.ts [--snow 0.45] < /dev/null   (키: stdin → MAPI_KEY → .env)
+   Run: npx tsx scripts/live-frame.ts [--snow 0.45] [--tri] [--opt] < /dev/null   (키: stdin → MAPI_KEY → .env)
+   --opt: 단면 최적화 반복(화면과 같은 optimizeLoop)을 Gen 에서 실행하고 최종 상태 계산서(ko HTML·PDF)를 output/frame 에 저장
    현재 문서를 C:/temp 에 백업 저장한 뒤 새 문서에서 진행. 결과: output/frame/live-<시각>.json
    Gen 단계는 화면과 같은 src/frame/run.ts 를 쓴다. 주의(gen-api-cautions.md): Assign 본문 DELETE·STEELCODECHECK 호출 금지. */
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -10,8 +11,10 @@ import { TUTORIAL_SPEC } from '../src/frame/tutorial'
 import { framePayloads } from '../src/frame/gen'
 import { n, type Request } from '../src/frame/results'
 import { designMembers, runFrameDesign } from '../src/frame/design'
-import { storyReview } from '../src/frame/story'
-import { analyze, collectAnalysis, collectForces, expectOk, sendFrame } from '../src/frame/run'
+import { overturning, storyReview } from '../src/frame/story'
+import { analyze, collectAnalysis, collectForces, expectOk, runRound, sendFrame, type FrameRound } from '../src/frame/run'
+import { optIter, optSummary, optimizeLoop, sectionsKey, type FrameSections } from '../src/frame/optimize'
+import type { FrameSpec } from '../src/frame/types'
 
 const client = new MidasClient({ mapiKey: await readMapiKey(), product: 'gen', timeout: 15 * 60 * 1000 })
 const req: Request = (m, p, b) => client.request(m, p, b as any) as Promise<any>
@@ -21,7 +24,9 @@ const evidence: Record<string, unknown> = { stamp }
 
 /* --snow <s0> : 예제에 지붕 적설을 더해 적설 케이스·조합(GB 50009 5.3.3, GB 55001)을 확인 */
 const snowArg = process.argv.indexOf('--snow'), s0 = snowArg > 0 ? Number(process.argv[snowArg + 1]) : 0
-const spec = s0 > 0 ? { ...TUTORIAL_SPEC, loads: { ...TUTORIAL_SPEC.loads, roofSnow: s0 } } : TUTORIAL_SPEC
+const base = s0 > 0 ? { ...TUTORIAL_SPEC, loads: { ...TUTORIAL_SPEC.loads, roofSnow: s0 } } : TUTORIAL_SPEC
+/* --tri : 오른쪽 위 패널(3,3)의 우상 모서리를 대각선으로 잘라 삼각 바닥(FBLA 3절점)·대각선 보를 확인 */
+const spec = process.argv.includes('--tri') ? { ...base, cuts: [[3, 3, 2]] as [number, number, 0 | 1 | 2 | 3][] } : base
 const model = buildFrame(spec), P = framePayloads(spec, model)
 log(`model: nodes ${model.nodes.length}, elements ${model.elements.length}, supports ${model.supports.length}, combos ${P.combos.length}`)
 for (const w of P.wind) log(`wind ${w.dir}: T1 ${w.T1.toFixed(3)} s, base ${w.base.toFixed(2)} kN, βz ${w.stories.map((s) => s.betaz.toFixed(3)).join('/')}`)
@@ -81,6 +86,53 @@ try {
   log('target (Gen fig 5-12): beam 0.912 sLCB14 · column 0.455 sLCB20 · brace 0.689 sLCB30 (no ψ)')
   evidence.design = design.members.map((m) => ({ id: m.id, role: m.role, story: m.story, elements: m.elements, L: m.L, muX: m.muX, muY: m.muY, ratio: m.ratio, combo: m.worst.combo, governing: m.worst.governing, detail: m.detailRatio, items: m.worst.items }))
   evidence.model = `C:/temp/sf_frame_${stamp}.mgbx`
+
+  /* 전도모멘트 — Gen OVERTURNING_MOMENT 머리글·값 + 앱 ΣV·h */
+  for (const k of ['otmX', 'otmY'] as const) { const tb = story[k]; if (tb) log(`${k} HEAD`, JSON.stringify(tb.HEAD), '\n  rows', JSON.stringify(tb.DATA.slice(0, 6))) }
+  const otm = overturning(spec, story)
+  log('overturning (Gen | ΣV·h) kN·m', otm.map((o) => `${o.story}: X ${o.gen.X?.toFixed(1) ?? '-'} | ${o.app.X?.toFixed(1)}  Y ${o.gen.Y?.toFixed(1) ?? '-'} | ${o.app.Y?.toFixed(1)}`).join(' · '))
+  evidence.otm = otm
+
+  if (process.argv.includes('--opt')) {
+    const combos = P.combos.map((c) => ({ name: c.name, seismic: c.seismic }))
+    /* 한 회 = src/frame/run.ts runRound (화면 최적화와 같은 순서), 기록 = optIter */
+    type St = Pick<FrameRound, 'spec' | 'model' | 'P' | 'forces' | 'review' | 'design'> & { A: FrameRound['analysis'] }
+    let cur: St = { spec, model, P, A, forces, review, design }
+    const iterOf = (c: St, it: number) => optIter(it, c.spec, c.model, c.review, c.design)
+    const runSpec = async (s2: FrameSpec, tag: string): Promise<St> => {
+      const r = await runRound(req, s2, { save: async () => expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_frame_${stamp}_${tag}.mgbx` }), 'save opt model'), log: (m) => log(`  ${m}`) })
+      return { ...r, A: r.analysis }
+    }
+    const show = (c: St, it: number) => { const x = iterOf(c, it); log(`  round ${it}: ${sectionsKey(x.sections)} · ${x.weight.toFixed(2)} t · max ${x.maxRatio.toFixed(3)} · NG ${x.ng} · drift ${x.driftOk ? 'OK' : 'NG'} · T1 ${c.A.story.eigen?.periods[0]?.toFixed(3)} s`); return x }
+    const t2 = Date.now()
+    show(cur, 0)
+    const r = await optimizeLoop({
+      start: iterOf(cur, 0),
+      state: () => ({ spec: cur.spec, forces: cur.forces, combos, colStrongAxis: cur.A.colStrongAxis }),
+      onPropose: (it, p) => log(`opt round ${it} proposal ${sectionsKey(p.sections)} ratio ${JSON.stringify(p.ratio)} fits ${JSON.stringify(p.fits)}`),
+      evaluate: async (sec: FrameSections, it) => { cur = await runSpec({ ...cur.spec, sections: { ...sec } }, `opt${it}`); return show(cur, it) },
+    })
+    if (sectionsKey(r.best.sections) !== sectionsKey(cur.spec.sections)) { log(`restoring best round ${r.best.it}`); cur = await runSpec({ ...cur.spec, sections: { ...r.best.sections } }, 'optbest') }
+    const D = cur.design, ratio = { column: D.byRole.column?.ratio ?? null, beam: D.byRole.beam?.ratio ?? null, brace: D.byRole.brace?.ratio ?? null }
+    const opt = optSummary(cur.model, r.iters, iterOf(cur, r.best.it), ratio, r.valid ? r.end : 'none_valid')
+    log(`optimisation ${opt.end} in ${((Date.now() - t2) / 1000).toFixed(0)} s: ${opt.weightBefore.toFixed(2)} t → ${opt.weightAfter.toFixed(2)} t`, opt.rows.map((x) => `${x.role} ${x.before} → ${x.after} (${x.ratio?.toFixed(3)})`).join(' · '))
+    evidence.opt = opt
+
+    /* 최종 상태 계산서 (ko) — HTML + PDF */
+    ;(globalThis as any).document = { documentElement: { lang: 'ko', dataset: {} } }
+    const { setLang } = await import('../src/i18n')
+    setLang('ko')
+    const { buildFrameReport } = await import('../src/frame/report')
+    const html = buildFrameReport({ built: { spec: cur.spec, model: cur.model, P: cur.P, file: `C:/temp/sf_frame_${stamp}_optbest.mgbx` }, analysis: cur.A, review: cur.review, design: cur.design, opt })
+    writeFileSync(`output/frame/report-${stamp}.html`, html)
+    const [{ DOMParser, XMLSerializer }, pdfMake, { PDFDocument }, { reportPdfDefinition }, { resolve }] = await Promise.all([import('@xmldom/xmldom'), import('pdfmake').then((m) => m.default), import('pdf-lib'), import('../src/report/pdf'), import('node:path')])
+    const font = resolve('public/fonts/report-kr.otf')
+    pdfMake.setLocalAccessPolicy((p: string) => p.startsWith(resolve('public/fonts'))); pdfMake.setUrlAccessPolicy(() => false)
+    pdfMake.addFonts({ Report: { normal: font, bold: font, italics: font, bolditalics: font } })
+    const buf = await pdfMake.createPdf(reportPdfDefinition(new DOMParser().parseFromString(html, 'text/html') as unknown as Document, (el) => new XMLSerializer().serializeToString(el as any))).getBuffer()
+    writeFileSync(`output/frame/report-${stamp}.pdf`, buf)
+    log(`report: output/frame/report-${stamp}.pdf (${(await PDFDocument.load(buf)).getPageCount()} pages)`)
+  }
 } finally {
   mkdirSync('output/frame', { recursive: true })
   writeFileSync(`output/frame/live-${stamp}.json`, JSON.stringify(evidence, null, 2))

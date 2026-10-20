@@ -7,10 +7,11 @@ import type { FrameAnalysis, SendCounts } from './run'
 import type { ElementForces } from './results'
 import type { StoryItem } from './story'
 import type { FrameDesign } from './design'
+import type { FrameOptSummary } from './optimize'
 import type { FrameModel, FrameSpec } from './types'
 import { FRAME_TEMPLATES, type FrameTemplateKey } from './templates'
 
-export const FRAME_STEPS = ['fs_start', 'fs_grid', 'fs_stories', 'fs_sections', 'fs_braces', 'fs_loads', 'fs_lateral', 'fs_review'] as const
+export const FRAME_STEPS = ['fs_grid', 'fs_stories', 'fs_sections', 'fs_braces', 'fs_loads', 'fs_lateral', 'fs_review'] as const
 export const REVIEW_STEP = FRAME_STEPS.length - 1
 
 export interface FrameBuilt { spec: FrameSpec; model: FrameModel; P: FramePayloads; counts: SendCounts; file: string }
@@ -27,6 +28,8 @@ export function freshFrameState() {
     forces: null as ElementForces | null,
     review: null as StoryItem[] | null,
     design: null as FrameDesign | null,
+    /** 단면 최적화 기록 (모델을 다시 만들면 비움) */
+    opt: null as FrameOptSummary | null,
     /** 3D 를 응력비 색으로 */
     ratioView: false,
   }
@@ -40,8 +43,8 @@ export function startTemplate(key: FrameTemplateKey): void {
   F.draft = clone(FRAME_TEMPLATES[key].spec)
   F.tpl = key
   F.view = 'edit'
-  F.step = 1
-  F.visited = Math.max(1, F.visited)
+  F.step = 0
+  F.visited = 0
   S.task = 'model'
   S.panel = 'viewP'
   S.viewNonce++
@@ -90,16 +93,17 @@ export function resetFrame(): void {
 /* 작업 흐름 상태 (TaskNav·TaskStage) */
 export type FrameTask = 'model' | 'analysis' | 'design' | 'optimize' | 'outputs'
 export type FrameTaskStatus = 'todo' | 'ready' | 'done' | 'running' | 'failed' | 'cancelled' | 'stale'
-const JOB_TASK: Record<string, FrameTask> = { build: 'model', restore: 'model', anal: 'analysis', design: 'design', pdf: 'outputs', docx: 'outputs' }
+const JOB_TASK: Record<string, FrameTask> = { build: 'model', restore: 'model', anal: 'analysis', design: 'design', pdf: 'outputs', docx: 'outputs', dwgpdf: 'outputs', opt: 'optimize' }
 
-export function frameBlocker(task: FrameTask): 'busy' | 'flow_need_model' | 'wf_stale_edited' | 'need_anal' | 'flow_need_connection' | 'fl_opt_later' | null {
+export function frameBlocker(task: FrameTask): 'busy' | 'flow_need_model' | 'wf_stale_edited' | 'need_anal' | 'flow_need_connection' | 'fr_opt_need_design' | null {
   if (S.busy || S.confirm) return 'busy'
   if (task === 'model') return null
-  if (task === 'optimize') return 'fl_opt_later'
   if (!F.built) return 'flow_need_model'
   if (frameStale(F)) return 'wf_stale_edited'
   if (task === 'design' && !F.analysis) return 'need_anal'
-  if (task === 'outputs') return F.design ? null : 'need_anal'
+  /* 산출물: 모델만 있어도 계산서·도면을 낸다 (해석·검토 전 부분은 '없음' 표시) */
+  if (task === 'outputs') return null
+  if (task === 'optimize' && !(F.design && F.forces)) return 'fr_opt_need_design'
   if (!S.mapiKey.trim()) return 'flow_need_connection'
   return null
 }
@@ -109,7 +113,7 @@ export function frameTaskStatus(task: FrameTask): FrameTaskStatus {
   if (task !== 'model' && frameStale(F)) return 'stale'
   if (S.lastFail && JOB_TASK[S.lastFail.kind] === task) return S.lastFail.cancelled ? 'cancelled' : 'failed'
   if (task === 'model') return F.built ? frameStale(F) ? 'stale' : 'done' : 'ready'
-  if (task === 'analysis' && F.analysis || task === 'design' && F.design) return 'done'
+  if (task === 'analysis' && F.analysis || task === 'design' && F.design || task === 'optimize' && F.opt) return 'done'
   const b = frameBlocker(task)
   return b && b !== 'flow_need_connection' ? 'todo' : 'ready'
 }

@@ -1,22 +1,19 @@
-/* 다층 강골조 모델링 8단계 — 开始 → 轴网 → 楼层 → 材料与截面 → 支撑布置 → 楼面荷载 → 风与地震 → 最终确认.
+/* 다층 강골조 모델링 7단계 — 轴网 → 楼层 → 材料与截面 → 支撑布置 → 楼面荷载 → 风与地震 → 最终确认.
    입력은 F.draft 를 직접 고친다(editDraft). 숫자 칸은 입력 중 문자열을 따로 들고 있다가 유효할 때만 반영. */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, ArrowRight, Building2, Check, CheckCircle2, Plus, Send, Trash2 } from 'lucide-react'
 import { t, type I18nKey } from '../../i18n'
 import { useStore } from '../../state/store'
-import { F, FRAME_STEPS, REVIEW_STEP, draftModel, draftPayloads, editDraft, goStep, startTemplate } from '../../frame/state'
-import { FRAME_TEMPLATES, FRAME_TEMPLATE_KEYS, type FrameTemplateKey } from '../../frame/templates'
+import { F, FRAME_STEPS, REVIEW_STEP, draftModel, draftPayloads, editDraft, goStep } from '../../frame/state'
 import { frameSectionNames } from '../../frame/sections'
 import { ALPHA_MAX, SFI, gravityTotals, tgOf } from '../../frame/loads'
 import type { Axis, CnSeismicSpec, FrameSpec } from '../../frame/types'
 import { buildFrameModel } from '../../actions/frame'
 import { NumericInput } from '../NumericInput'
 import { FramePlan } from './FramePlan'
-import { PLAN_SHAPES, SHAPE_MIN, braceBays, planConnected, pruneBraces, setGrid, setPanel, shapeFits, shapeRemoved, toggleBrace, type PlanShape } from '../../frame/plan'
+import { PLAN_SHAPES, SHAPE_MIN, applyShape, braceBays, coordsOf, deleteSpan, formatSpans, insertSpan, parseSpans, planConnected, setGrid, setPanelState, shapeFits, shapeRemoved, spansOf, toggleBrace, type PlanShape } from '../../frame/plan'
 
 const r6 = (v: number) => +v.toFixed(6)
-const spansOf = (a: number[]) => a.slice(1).map((v, i) => r6(v - a[i]))
-const coordsOf = (spans: number[]) => spans.reduce<number[]>((acc, s) => [...acc, r6(acc.at(-1)! + s)], [0])
 
 /** 숫자 칸 — 유효하지 않은 입력은 표시만 하고 스펙은 그대로 */
 function Num({ label, value, unit, step = 0.1, min = 0, max, onChange, disabled }: { label: string; value: number; unit?: string; step?: number; min?: number; max?: number; onChange(v: number): void; disabled?: boolean }) {
@@ -32,19 +29,40 @@ function Num({ label, value, unit, step = 0.1, min = 0, max, onChange, disabled 
 }
 
 /** 스팬 목록 칸 — "6, 6, 6" (쉼표·공백 구분) */
-function SpanList({ label, coords, onChange, disabled }: { label: string; coords: number[]; onChange(c: number[]): void; disabled?: boolean }) {
-  const text = spansOf(coords).join(', ')
+/** 한 방향 격자 — 먼저 等跨 / 不等跨 를 고르고, 等跨 = [−] 개수 [+] × 간격, 不等跨 = 스팬 목록("6, 6, 8" / 줄임 "2@6, 8") */
+function AxisRow({ axis, coords, onChange, disabled }: { axis: Axis; coords: number[]; onChange(c: number[]): void; disabled?: boolean }) {
+  const sp = spansOf(coords), uniform = sp.every((v) => v === sp[0]) ? sp[0] : null
+  const [mode, setMode] = useState<'equal' | 'unequal'>(uniform === null ? 'unequal' : 'equal')
+  /* 스팬이 다른 곳(평면 치수 편집·삽입·템플릿)에서 부등간격이 되면 부등간격으로 — 등간격 입력이 스팬을 한 값으로 덮지 않게 */
+  useEffect(() => { if (uniform === null) setMode('unequal') }, [uniform])
+  const text = formatSpans(sp)
   const [raw, setRaw] = useState(text)
-  useEffect(() => { setRaw((r) => parse(r)?.join(', ') === text ? r : text) }, [text])
-  function parse(s: string): number[] | null {
-    const v = s.split(/[,\s]+/).filter(Boolean).map(Number)
-    return v.length && v.every((x) => Number.isFinite(x) && x > 0) ? v : null
-  }
-  const ok = parse(raw)
-  return <label className="pe-f pe-full"><span>{label}</span><div className="pe-in">
-    <input className="pe-numeric-list" value={raw} disabled={disabled} inputMode="decimal" aria-invalid={!ok || undefined}
-      onChange={(e) => { setRaw(e.target.value); const p = parse(e.target.value); if (p) onChange(coordsOf(p)) }} /><span className="pe-u">m</span></div>
-    <small className={ok ? 'pe-hint' : 'mw-error'}>{ok ? t('fr_span_hint', ok.length, r6(ok.reduce((a, b) => a + b, 0))) : t('fr_list_error')}</small></label>
+  useEffect(() => { setRaw((r) => formatSpans(parseSpans(r) ?? []) === text ? r : text) }, [text])
+  const [gap, setGap] = useState(String(uniform ?? sp[0]))
+  useEffect(() => { if (uniform !== null) setGap((g) => Number(g) === uniform ? g : String(uniform)) }, [uniform])
+  const ok = parseSpans(raw)
+  const total = r6(sp.reduce((x, y) => x + y, 0))
+  const setCount = (nc: number) => { if (nc < 1 || nc > 60) return; const L = Number(gap) > 0 ? Number(gap) : sp[0]; onChange(coordsOf(Array(nc).fill(L), coords[0])) }
+  const toEqual = () => { setMode('equal'); if (uniform === null) { setGap(String(sp[0])); onChange(coordsOf(Array(sp.length).fill(sp[0]), coords[0])) } }
+  return <div className="fr-axis-row">
+    <b title={axis === 'X' ? t('fr_spans_x') : t('fr_spans_y')}>{axis}</b>
+    <div className="fr-seg" role="radiogroup" aria-label={axis === 'X' ? t('fr_dir_x') : t('fr_dir_y')}>
+      <button type="button" role="radio" aria-checked={mode === 'equal'} disabled={disabled} onClick={toEqual}>{t('fr_mode_equal')}</button>
+      <button type="button" role="radio" aria-checked={mode === 'unequal'} disabled={disabled} onClick={() => setMode('unequal')}>{t('fr_mode_unequal')}</button>
+    </div>
+    {mode === 'equal' ? <div className="fr-axis-in">
+      <span className="fr-step"><button type="button" disabled={disabled || sp.length <= 1} aria-label={t('fr_span_less')} onClick={() => setCount(sp.length - 1)}>−</button><span>{sp.length}</span>
+        <button type="button" disabled={disabled} aria-label={t('fr_span_more')} onClick={() => setCount(sp.length + 1)}>+</button></span>
+      <span className="fr-unit">{t('fr_spans_unit')} ×</span>
+      <div className="pe-in fr-gap"><NumericInput value={gap} step={0.5} min={0.5} disabled={disabled} aria-label={t('fr_uniform')}
+        onValueChange={(v) => { setGap(v); const L = Number(v); if (L > 0) onChange(coordsOf(Array(sp.length).fill(L), coords[0])) }} /><span className="pe-u">m</span></div>
+      <span className="fr-total">= {total} m</span>
+    </div> : <div className="fr-axis-in">
+      <div className="pe-in fr-list"><input className="pe-numeric-list" value={raw} disabled={disabled} placeholder="6, 6, 8 · 2@6, 8" aria-label={axis === 'X' ? t('fr_spans_x') : t('fr_spans_y')} aria-invalid={!ok || undefined}
+        onChange={(e) => { setRaw(e.target.value); const v = parseSpans(e.target.value); if (v) onChange(coordsOf(v, coords[0])) }} /><span className="pe-u">m</span></div>
+      <span className="fr-total">{ok ? `${ok.length} ${t('fr_spans_unit')} = ${r6(ok.reduce((x, y) => x + y, 0))} m` : t('fr_list_bad')}</span>
+    </div>}
+  </div>
 }
 
 function Sel<T extends string | number>({ label, value, options, onChange, disabled }: { label: string; value: T; options: [T, string][]; onChange(v: T): void; disabled?: boolean }) {
@@ -55,25 +73,7 @@ function Sel<T extends string | number>({ label, value, options, onChange, disab
 
 const Group = ({ title, children }: { title: I18nKey; children: ReactNode }) => <section className="mw-group"><h4>{t(title)}</h4><div className="pe-grid">{children}</div></section>
 
-function templateFacts(spec: FrameSpec) {
-  const m = draftModel(spec).model
-  return { bays: `${spec.xs.length - 1} × ${spec.ys.length - 1}`, stories: spec.heights.length, area: m ? m.floorArea : 0, braces: spec.braces.length }
-}
 
-export function TemplatePicker({ onPick, disabled }: { onPick(k: FrameTemplateKey): void; disabled?: boolean }) {
-  return <div className="ws-template-grid">{FRAME_TEMPLATE_KEYS.map((key) => {
-    const f = templateFacts(FRAME_TEMPLATES[key].spec)
-    return <button className="ws-template" key={key} disabled={disabled} aria-pressed={F.tpl === key} onClick={() => onPick(key)}>
-      <strong>{t(`fr_tpl_${key}`)}</strong>
-      <span className="ws-template-specs">
-        <span><small>{t('fr_bays')}</small><span>{f.bays}</span></span>
-        <span><small>{t('fr_stories')}</small><span>{f.stories}</span></span>
-        <span><small>{t('fr_area_story')}</small><span>{f.area}<small>m²</small></span></span>
-      </span>
-      <span className="ws-template-meta"><span>{t(`fr_tpl_${key}_hint`)}</span></span>
-    </button>
-  })}</div>
-}
 
 /** 형상 아이콘 — 4×3 칸 미리보기 */
 function ShapeIcon({ shape }: { shape: PlanShape }) {
@@ -87,24 +87,51 @@ function GridStep({ spec, off }: { spec: FrameSpec; off: boolean }) {
   const n = spec.xs.length - 1, m = spec.ys.length - 1
   const { model } = draftModel(spec)
   const connected = planConnected(spec)
+  const [tool, setTool] = useState<'cell' | 'tri'>('cell')
+  const [sel, setSel] = useState<{ axis: Axis; at: number } | null>(null)
+  const arr = (s: FrameSpec, a: Axis) => (a === 'X' ? s.xs : s.ys)
+  const selLen = sel ? arr(spec, sel.axis)[sel.at + 1] - arr(spec, sel.axis)[sel.at] : 0
+  useEffect(() => { if (sel && sel.at >= (sel.axis === 'X' ? n : m)) setSel(null) }, [n, m])
+  const label = (axis: Axis, at: number) => axis === 'X' ? `${t('fr_dir_x')} ${at + 1}–${at + 2}` : `${t('fr_dir_y')} ${String.fromCharCode(65 + at)}–${String.fromCharCode(66 + at)}`
+  const setLen = (v: number) => editDraft((s) => {
+    if (!sel) return
+    const sp = spansOf(arr(s, sel.axis)); sp[sel.at] = v
+    const c = coordsOf(sp, arr(s, sel.axis)[0])
+    setGrid(s, sel.axis === 'X' ? c : s.xs, sel.axis === 'Y' ? c : s.ys)
+  })
   return <>
-    <Group title="fr_grid">
-      <SpanList label={t('fr_spans_x')} coords={spec.xs} disabled={off} onChange={(c) => editDraft((s) => setGrid(s, c, s.ys))} />
-      <SpanList label={t('fr_spans_y')} coords={spec.ys} disabled={off} onChange={(c) => editDraft((s) => setGrid(s, s.xs, c))} />
-    </Group>
+    <section className="mw-group"><h4>{t('fr_grid')}</h4>
+      <div className="fr-axes">
+        <AxisRow axis="X" coords={spec.xs} disabled={off} onChange={(c) => editDraft((s) => setGrid(s, c, s.ys))} />
+        <AxisRow axis="Y" coords={spec.ys} disabled={off} onChange={(c) => editDraft((s) => setGrid(s, s.xs, c))} />
+      </div>
+      <p className="mw-note">{t('fr_grid_hint')}</p>
+    </section>
     <section className="mw-group"><h4>{t('fr_shape')}</h4>
       <div className="fr-shapes" role="group" aria-label={t('fr_shape')}>{PLAN_SHAPES.map((sh) => {
         const fits = shapeFits(sh, n, m)
         return <button key={sh} type="button" disabled={off || !fits} title={fits ? t(`fr_shape_${sh}`) : t('fr_shape_min', SHAPE_MIN[sh][0], SHAPE_MIN[sh][1])}
-          onClick={() => editDraft((s) => { s.removed = shapeRemoved(sh, n, m); pruneBraces(s) })}><ShapeIcon shape={sh} /><span>{t(`fr_shape_${sh}`)}</span></button>
+          onClick={() => editDraft((s) => applyShape(s, sh))}><ShapeIcon shape={sh} /><span>{t(`fr_shape_${sh}`)}</span></button>
       })}</div>
-      <p className="mw-note">{t('fr_cells_hint')}</p>
-      <FramePlan spec={spec} mode="cells" disabled={off} onCell={(i, j, on) => editDraft((s) => { setPanel(s, i, j, on); pruneBraces(s) })} />
-      <div className="fr-plan-stat"><span>{t('fr_panels')} <b>{n * m - spec.removed.length} / {n * m}</b></span>{model && <span>{t('fr_area_story')} <b>{model.floorArea} m²</b></span>}{model && <span>{t('fr_columns_per_story')} <b>{model.supports.length}</b></span>}</div>
+      <div className="fr-tools" role="group" aria-label={t('fr_tool')}>
+        <button type="button" aria-pressed={tool === 'cell'} onClick={() => setTool('cell')}>▦ {t('fr_tool_cell')}</button>
+        <button type="button" aria-pressed={tool === 'tri'} onClick={() => setTool('tri')}>◩ {t('fr_tool_tri')}</button>
+      </div>
+      <p className="mw-note">{t(tool === 'cell' ? 'fr_cells_hint' : 'fr_tri_hint')}</p>
+      <FramePlan spec={spec} mode="cells" tool={tool} disabled={off} selectedSpan={sel} onSpan={(axis, at) => setSel(sel?.axis === axis && sel.at === at ? null : { axis, at })}
+        onCell={(i, j, st) => editDraft((s) => setPanelState(s, i, j, st))} />
+      {sel && <div className="fr-spanbar"><b>{label(sel.axis, sel.at)}</b>
+        <div className="pe-in"><NumCell value={selLen} disabled={off} onChange={setLen} /><span className="pe-u">m</span></div>
+        <button type="button" className="btn btn-ghost" disabled={off} onClick={() => editDraft((s) => insertSpan(s, sel.axis, sel.at, selLen))}>{t(sel.axis === 'X' ? 'fr_insert_left' : 'fr_insert_below')}</button>
+        <button type="button" className="btn btn-ghost" disabled={off} onClick={() => { editDraft((s) => insertSpan(s, sel.axis, sel.at + 1, selLen)); setSel({ ...sel, at: sel.at + 1 }) }}>{t(sel.axis === 'X' ? 'fr_insert_right' : 'fr_insert_above')}</button>
+        <button type="button" className="btn btn-ghost" disabled={off || (sel.axis === 'X' ? n : m) <= 1} onClick={() => { editDraft((s) => deleteSpan(s, sel.axis, sel.at)); setSel(null) }}><Trash2 size={13} />{t('fr_delete_span')}</button>
+      </div>}
+      <div className="fr-plan-stat"><span>{t('fr_panels')} <b>{n * m - spec.removed.length} / {n * m}</b></span>{(spec.cuts?.length ?? 0) > 0 && <span>{t('fr_tool_tri')} <b>{spec.cuts!.length}</b></span>}{model && <span>{t('fr_area_story')} <b>{model.floorArea} m²</b></span>}{model && <span>{t('fr_columns_per_story')} <b>{model.supports.length}</b></span>}</div>
       {!connected && <p className="mw-error" role="alert">{t('fr_plan_disconnected')}</p>}
     </section>
   </>
 }
+
 function StoriesStep({ spec, off }: { spec: FrameSpec; off: boolean }) {
   const ns = spec.heights.length
   return <>
@@ -220,12 +247,12 @@ function ReviewStep({ spec, onEdit, off }: { spec: FrameSpec; onEdit(i: number):
       <span>{t('fr_supports')}<b>{model.supports.length}</b></span><span>{t('fr_area_story')}<b>{model.floorArea}<small> m²</small></b></span>
     </div>}
     <table className="fr-table fr-review"><tbody>
-      {row('fs_grid', `${spec.xs.length - 1} × ${spec.ys.length - 1} · ${spec.xs.at(-1)! - spec.xs[0]} × ${spec.ys.at(-1)! - spec.ys[0]} m${spec.removed.length ? ` · ${t('fr_panels')} ${(spec.xs.length - 1) * (spec.ys.length - 1) - spec.removed.length}/${(spec.xs.length - 1) * (spec.ys.length - 1)}` : ''}`, 1)}
-      {row('fs_stories', `${spec.heights.length} · ${spec.heights.join(' / ')} m · ${t('fr_baseZ')} ${spec.baseZ} m`, 2)}
-      {row('fs_sections', `${spec.material} · ${spec.sections.beam} / ${spec.sections.column} / ${spec.sections.brace}`, 3)}
-      {row('fs_braces', spec.braces.length ? `${spec.braces.length} · X ${t(spec.design.braced.X ? 'fr_nosway' : 'fr_sway')} · Y ${t(spec.design.braced.Y ? 'fr_nosway' : 'fr_sway')}` : t('fr_no_braces'), 4)}
-      {row('fs_loads', `DL ${spec.loads.floorDead}/${spec.loads.roofDead} · LL ${spec.loads.floorLive}/${spec.loads.roofLive}${spec.loads.roofSnow > 0 ? ` · S ${+(spec.loads.roofSnow * spec.loads.snowMu).toFixed(3)}` : ''} kN/m² · ${spec.loads.edgeFloor}/${spec.loads.edgeRoof} kN/m`, 5)}
-      {row('fs_lateral', `w₀ ${spec.wind.w0} · ${spec.wind.terrain} · ${spec.seismic.intensity.split('_')[0]}${t('fr_degree')} ${SFI[spec.seismic.intensity]} · ${t('fr_group_n', spec.seismic.group)} · ${spec.seismic.site} · ${t('fr_grade_n', spec.design.seismicGrade)}`, 6)}
+      {row('fs_grid', `${spec.xs.length - 1} × ${spec.ys.length - 1} · ${spec.xs.at(-1)! - spec.xs[0]} × ${spec.ys.at(-1)! - spec.ys[0]} m${spec.removed.length ? ` · ${t('fr_panels')} ${(spec.xs.length - 1) * (spec.ys.length - 1) - spec.removed.length}/${(spec.xs.length - 1) * (spec.ys.length - 1)}` : ''}`, 0)}
+      {row('fs_stories', `${spec.heights.length} · ${spec.heights.join(' / ')} m · ${t('fr_baseZ')} ${spec.baseZ} m`, 1)}
+      {row('fs_sections', `${spec.material} · ${spec.sections.beam} / ${spec.sections.column} / ${spec.sections.brace}`, 2)}
+      {row('fs_braces', spec.braces.length ? `${spec.braces.length} · X ${t(spec.design.braced.X ? 'fr_nosway' : 'fr_sway')} · Y ${t(spec.design.braced.Y ? 'fr_nosway' : 'fr_sway')}` : t('fr_no_braces'), 3)}
+      {row('fs_loads', `DL ${spec.loads.floorDead}/${spec.loads.roofDead} · LL ${spec.loads.floorLive}/${spec.loads.roofLive}${spec.loads.roofSnow > 0 ? ` · S ${+(spec.loads.roofSnow * spec.loads.snowMu).toFixed(3)}` : ''} kN/m² · ${spec.loads.edgeFloor}/${spec.loads.edgeRoof} kN/m`, 4)}
+      {row('fs_lateral', `w₀ ${spec.wind.w0} · ${spec.wind.terrain} · ${spec.seismic.intensity.split('_')[0]}${t('fr_degree')} ${SFI[spec.seismic.intensity]} · ${t('fr_group_n', spec.seismic.group)} · ${spec.seismic.site} · ${t('fr_grade_n', spec.design.seismicGrade)}`, 5)}
     </tbody></table>
     {g && P && <div className="pe-tip">{t('fr_totals', (g.dlExceptSelf).toFixed(0), g.ll.toFixed(0), P.wind[0].base.toFixed(1), P.wind[1].base.toFixed(1), P.combos.length)}</div>}
     <p className="mw-note">{t('fr_build_note')}</p>
@@ -253,13 +280,12 @@ export function FrameWizard({ onHome }: { onHome(): void }) {
     </button>)}</nav>
     <div className="mw-content" ref={content}>
       <div className="mw-stage-heading"><span className="mw-eyebrow">{t('mw_step', step + 1)}</span><h3 tabIndex={-1} ref={heading}>{t(FRAME_STEPS[step])}</h3></div>
-      {step === 0 && <><TemplatePicker disabled={off} onPick={(k) => startTemplate(k)} /><p className="mw-note">{t('fr_template_note')}</p></>}
-      {step === 1 && <GridStep spec={spec} off={off} />}
-      {step === 2 && <StoriesStep spec={spec} off={off} />}
-      {step === 3 && <SectionsStep spec={spec} off={off} />}
-      {step === 4 && <BracesStep spec={spec} off={off} />}
-      {step === 5 && <LoadsStep spec={spec} off={off} />}
-      {step === 6 && <LateralStep spec={spec} off={off} />}
+      {step === 0 && <GridStep spec={spec} off={off} />}
+      {step === 1 && <StoriesStep spec={spec} off={off} />}
+      {step === 2 && <SectionsStep spec={spec} off={off} />}
+      {step === 3 && <BracesStep spec={spec} off={off} />}
+      {step === 4 && <LoadsStep spec={spec} off={off} />}
+      {step === 5 && <LateralStep spec={spec} off={off} />}
       {step === REVIEW_STEP && <>{!errors.length && <div className="mw-ready"><CheckCircle2 size={18} />{t('mw_ready')}</div>}<ReviewStep spec={spec} off={off} onEdit={goStep} /></>}
     </div>
     <footer className="mw-footer">

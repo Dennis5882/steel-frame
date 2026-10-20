@@ -2,6 +2,7 @@ import { addKo } from './additions'
 import { repairKo } from './repair'
 import { sectionKo } from './sectionPicker'
 import { frameKo } from './frame'
+import { frameReportKo } from './frameReport'
 import { flowKo } from './modelingFlow'
 import type { Dict } from './en'
 
@@ -11,6 +12,7 @@ export const ko: Dict = {
   ...sectionKo,
   ...flowKo,
   ...frameKo,
+  ...frameReportKo,
   bay_mode: '기둥 간격 입력 방식',
   numeric_wheel_hint: '클릭 후 휠 또는 ↑↓ 키로 값을 조절합니다.',
   bay_error: '모든 베이 간격에 0보다 큰 숫자를 입력하세요.',
@@ -528,6 +530,10 @@ export const ko: Dict = {
   g_help_2: '릴리즈 노트',
   g_help_2_cmd: '릴리즈 노트',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_2_0_1: '계산서를 PDF·Word·HTML로 냅니다: 개요, 모델, 하중·조합, 해석 결과, 층 검토, 지배 부재 상세를 포함한 GB 50017 부재 검토, 가정, 도면. 해석 전에도 낼 수 있습니다(모델·하중만).',
+  rn_v1_2_0_2: '간단 도면을 A3 PDF·DXF로 냅니다: 표준층 구조 평면, 가새 골조선 입면, 부재표와 일반 사항. 전도모멘트는 Gen 표(OVERTURNING_MOMENT)를 읽어 앱 대조값 ΣV·h 와 함께 보이며, 라이브에서 일치했습니다.',
+  rn_v1_2_0_3: '단면 최적화: 종류별로 가장 가벼운 압연 H(응력비 ≤ 0.95, 구조 규정)를 고르고 Gen에서 다시 생성·해석해 수렴할 때까지 반복합니다(최대 5회). 취소하면 원래 단면을 그대로 둡니다. 대각선 보가 기둥 계산길이계수에 들어가고, 스팬 하나를 고치면 X/Y 간격이 부등간격으로 바뀝니다.',
+  rn_v1_1_3_1: '시작 화면은 새 프레임 하나로 정리했고(Gen NX 예제는 계속 불러올 수 있음) 모델링은 격자부터 시작합니다. 격자는 스팬 개수 × 간격이나 4@6, 8 같은 목록으로 만들고, 평면의 치수를 클릭해 그 스팬을 바꾸거나 넣고 뺄 수 있습니다(형상 유지). 삼각 도구로 칸의 모서리를 대각선으로 잘라 대각선 보와 삼각형 바닥을 만듭니다.',
   rn_v1_1_2_1: '격자 단계를 평면 편집기로 바꿨습니다: 격자 칸을 클릭하거나 끌어서 바닥 패널을 넣고 빼거나, 형상 프리셋(사각형·L·T·십자·ㄷ·E·중정)을 적용합니다. 스팬을 바꿔도 형상이 유지됩니다.',
   rn_v1_1_2_2: '人자형 가새는 평면의 보 선을 클릭해서 배치합니다.',
   rn_v1_1_2_3: '지붕 적설(기본설압 s₀, 분포계수 μr)을 GB 55001 조합과 함께 추가했습니다. 적설은 지붕 활하중과 같이 조합하지 않습니다(GB 50009 5.3.3). 내진 규범 표기를 GB/T 50011-2010(2024年版)으로 고치고 강제규범 GB 55001/55002/55006을 함께 표시합니다.',

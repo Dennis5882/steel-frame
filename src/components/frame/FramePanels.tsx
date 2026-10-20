@@ -5,8 +5,9 @@ import { useStore } from '../../state/store'
 import { F, draftModel, draftPayloads, frameStale } from '../../frame/state'
 import { gravityTotals } from '../../frame/loads'
 import { equilibriumError } from '../../frame/run'
+import { overturning } from '../../frame/story'
 import type { StoryItem, StoryStatus } from '../../frame/story'
-import type { MemberDesign } from '../../frame/design'
+import { memberFails, type MemberDesign } from '../../frame/design'
 import type { FrameRole } from '../../frame/types'
 
 const KV = ({ k, v, hi }: { k: string; v: ReactNode; hi?: boolean }) => <div className="kv"><span className="k">{k}</span><span className={`v${hi ? ' hi' : ''}`}>{v}</span></div>
@@ -15,7 +16,7 @@ const f = (v: number, d = 3) => Number.isFinite(v) ? v.toFixed(d) : '—'
 const STORY_GRADE: Record<StoryStatus, string> = { ok: 'pass', warn: 'prelim', ng: 'fail', na: 'expert' }
 export const StoryChip = ({ s }: { s: StoryStatus }) => <span className="grade" data-g={STORY_GRADE[s]}>{t(`fr_st_${s}`)}</span>
 /** 부재 등급: 강도·구조 규정 NG → fail, 통과해도 1차 미구현 항목(가새 불평형력·강기둥약보·节点域)이 남아 expert */
-export const memberGradeOf = (m: MemberDesign) => m.ratio > 1 || m.detailRatio > 1 ? 'fail' : 'expert'
+export const memberGradeOf = (m: MemberDesign) => memberFails(m) ? 'fail' : 'expert'
 export const MemberChip = ({ m }: { m: MemberDesign }) => { const g = memberGradeOf(m); return <span className="grade" data-g={g}>{t(g === 'fail' ? 'gr_fail' : 'fr_gr_expert')}</span> }
 
 export function FrameModelPanel() {
@@ -116,6 +117,12 @@ export function FrameResultsPanel() {
         {eig.periods.map((p, i) => <tr key={i}><td>{i + 1}</td><td className="mono">{f(p, 4)}</td><td className="mono">{f(eig.massX[i] ?? NaN, 2)}</td><td className="mono">{f(eig.massY[i] ?? NaN, 2)}</td></tr>)}
       </tbody></table> : <p className="pe-tip">{t('fr_eigen_missing')}</p>}
     </div>
+    {F.built && (() => { const otm = overturning(F.built.spec, A.story); return otm.length > 0 && <div className="scard"><h3>{t('rp_otm')}</h3>
+      <table><thead><tr><th>{t('fr_story')}</th><th>Gen RX</th><th>ΣV·h X</th><th>Gen RY</th><th>ΣV·h Y</th></tr></thead><tbody>
+        {otm.map((o) => <tr key={o.story}><td>{o.story}</td>{[o.gen.X, o.app.X, o.gen.Y, o.app.Y].map((v, i) => <td key={i} className="mono">{f(v ?? NaN, 1)}</td>)}</tr>)}
+      </tbody></table>
+      <p className="pe-tip">{t('rp_otm_note')}</p>
+    </div> })()}
     <div className="scard"><h3>{t('fr_equilibrium')}</h3>
       <table><thead><tr><th>{t('res_lc')}</th><th>Gen (kN)</th><th>{t('fr_app')} (kN)</th><th>{t('fr_diff')}</th></tr></thead><tbody>
         {Object.entries(A.equilibrium).map(([k, e]) => <tr key={k}><td className="mono">{k}</td><td className="mono">{f(e.gen, 2)}</td><td className="mono">{f(e.app, 2)}</td>

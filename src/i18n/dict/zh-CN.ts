@@ -2,6 +2,7 @@ import { addCN } from './additions'
 import { repairCN } from './repair'
 import { sectionCn } from './sectionPicker'
 import { frameZhCN } from './frame'
+import { frameReportZhCN } from './frameReport'
 import { flowCN } from './modelingFlow'
 import type { Dict } from './en'
 
@@ -12,6 +13,7 @@ export const zhCN: Dict = {
   ...sectionCn,
   ...flowCN,
   ...frameZhCN,
+  ...frameReportZhCN,
   bay_mode: '柱距输入方式',
   numeric_wheel_hint: '点击后可用滚轮或 ↑↓ 键调整数值。',
   bay_error: '请为每一跨间距输入大于零的数值。',
@@ -526,6 +528,10 @@ export const zhCN: Dict = {
   g_help_2: '版本说明',
   g_help_2_cmd: '版本说明',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_2_0_1: '计算书可导出 PDF、Word、HTML：概况、模型、荷载与组合、分析结果、楼层验算、含控制构件详情的 GB 50017 构件验算、假定与图纸。分析前也可导出（仅模型与荷载）。',
+  rn_v1_2_0_2: '简图可导出 A3 PDF、DXF：标准层结构平面、支撑框架立面、构件表与总说明。倾覆弯矩读取 Gen 表（OVERTURNING_MOMENT），并与程序校核值 ΣV·h 并列，实测一致。',
+  rn_v1_2_0_3: '截面优化：按类别选最轻的热轧 H 型钢（应力比 ≤ 0.95、满足构造），在 Gen 中重建并分析直至收敛（最多 5 轮）；取消时保留原截面。斜梁计入柱计算长度系数；修改某一跨后 X/Y 间距自动转为不等跨。',
+  rn_v1_1_3_1: '开始页改为单一「新建框架」（仍可载入 Gen NX 例题），建模从轴网开始。轴网可按跨数 × 间距或 4@6, 8 这样的列表输入；点击平面尺寸可修改、插入或删除该跨，形状保持不变。新增三角工具，沿对角线切去区格一角，生成斜梁与三角形楼板。',
   rn_v1_1_2_1: '轴网步骤改为平面编辑器：点击或拖动格子添加或删除楼板区格，或套用形状模板（矩形、L、T、十字、凹形、E、回字形）。修改跨度时形状保持不变。',
   rn_v1_1_2_2: '人字形支撑改为在平面中点击梁线布置。',
   rn_v1_1_2_3: '新增屋面雪荷载（基本雪压 s₀、积雪分布系数 μr）及 GB 55001 组合，雪荷载不与屋面活荷载同时组合（GB 50009 5.3.3）。抗震规范标注改为 GB/T 50011-2010（2024 年版），并显示强制性规范 GB 55001/55002/55006。',

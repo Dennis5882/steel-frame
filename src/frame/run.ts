@@ -3,9 +3,11 @@
    주의(docs/gen-api-cautions.md): Assign 본문 DELETE·STEELCODECHECK 금지, 결과 회수 중 모델 변경 금지. */
 import { sectionArea } from '../domain/sections'
 import { gravityTotals } from './loads'
-import { selfWeight, type FramePayloads } from './gen'
+import { framePayloads, selfWeight, type FramePayloads } from './gen'
+import { buildFrame } from './geometry'
+import { designMembers, runFrameDesign, type FrameDesign } from './design'
 import { fetchElementForces, n, reactionSums, rows, table, type ElementForces, type Request } from './results'
-import { parseEigen, type StoryTables } from './story'
+import { parseEigen, storyReview, type StoryItem, type StoryTables } from './story'
 import type { FrameModel, FrameSpec } from './types'
 
 export const GEN_OK = 'MIDAS GEN NX command complete'
@@ -51,7 +53,7 @@ export interface FrameAnalysis {
 }
 
 /** 표 회수 호출 수 (진행 막대) */
-export const COLLECT_CALLS = 1 + 11 + 2 + 1
+export const COLLECT_CALLS = 1 + 13 + 2 + 1
 
 /** 해석 결과 회수 (층 표·고유치·평형·강축). 표 하나가 실패해도 나머지는 계속 */
 export async function collectAnalysis(req: Request, spec: FrameSpec, model: FrameModel, P: FramePayloads, log: (m: string) => void = () => {}): Promise<FrameAnalysis> {
@@ -80,6 +82,10 @@ export async function collectAnalysis(req: Request, spec: FrameSpec, model: Fram
   await tryTable('stiffY', 'STIFFNESS_IRREGULARITY_Y', ['RY(RS)'], SD)
   await tryTable('torsionX', 'TORSIONAL_IRREGULARITY_X', ['RX(RS)'])
   await tryTable('torsionY', 'TORSIONAL_IRREGULARITY_Y', ['RY(RS)'])
+  /* 倾覆弯矩 — 머리글에 같은 이름(각도별 Frame/Wall)이 반복되어 원본 표 그대로 둔다 (story.ts overturning) */
+  for (const [key, lc] of [['otmX', 'RX(RS)'], ['otmY', 'RY(RS)']] as const) {
+    try { story[key] = await table(req, 'OVERTURNING_MOMENT', { loads: [lc] }) } catch (e: any) { missing[key] = e?.message ?? String(e); log(`OVERTURNING_MOMENT ${lc}: ${missing[key]}`) }
+  }
   /* 주기·참여질량 — EIGENVALUEMODE 는 간헐적으로 Unknown Error (gen-api-cautions.md 4) → 한 번 재시도 */
   let eigen: StoryTables['eigen'] = null
   for (let i = 0; i < 2 && !eigen; i++) {
@@ -102,3 +108,24 @@ export function collectForces(req: Request, model: FrameModel, P: FramePayloads,
 
 /** 평형 오차 (상대) — 0.1 % 넘으면 하중 전송 이상 */
 export const equilibriumError = (e: Equilibrium) => Math.abs(e.gen - e.app) / Math.max(1e-9, Math.abs(e.app))
+
+export interface FrameRound { spec: FrameSpec; model: FrameModel; P: FramePayloads; counts: SendCounts; analysis: FrameAnalysis; forces: ElementForces; review: StoryItem[]; design: FrameDesign }
+
+/** 최적화 한 회 — 화면(actions/frame.ts)과 scripts/live-frame.ts --opt 공용. save = 전송 뒤 문서 저장(해석 확인 창 방지), stage = 진행 표시 */
+export async function runRound(req: Request, spec: FrameSpec, o: { save(): Promise<void>; stage?(key: 'st_send' | 'st_anal' | 'st_results' | 'st_check', calls: number): void; log?(m: string): void; onSent?(model: FrameModel, P: FramePayloads, counts: SendCounts): void }): Promise<FrameRound> {
+  const model = buildFrame(spec), P = framePayloads(spec, model)
+  o.stage?.('st_send', SEND_CALLS)
+  const counts = await sendFrame(req, P, model)
+  o.onSent?.(model, P, counts)
+  o.stage?.('st_anal', 2)
+  await o.save()
+  await analyze(req)
+  o.stage?.('st_results', COLLECT_CALLS)
+  const analysis = await collectAnalysis(req, spec, model, P, o.log)
+  o.stage?.('st_results', P.combos.length)
+  const forces = await collectForces(req, model, P)
+  o.stage?.('st_check', 0)
+  const review = storyReview(spec, model, analysis.story, analysis.colStrongAxis)
+  const design = runFrameDesign(spec, designMembers(spec, model, analysis.colStrongAxis), forces, P.combos.map((c) => ({ name: c.name, seismic: c.seismic })))
+  return { spec, model, P, counts, analysis, forces, review, design }
+}

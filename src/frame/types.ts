@@ -58,6 +58,8 @@ export interface FrameSpec {
   storyNames: string[]
   /** 평면에서 뺀 패널 [i, j] (모든 층) — i = X 스팬 번호, j = Y 스팬 번호 (0부터). 형상 편집: src/frame/plan.ts */
   removed: [number, number][]
+  /** 삼각형으로 자른 패널 [i, j, 잘라낸 모서리] — 0 좌하 · 1 우하 · 2 우상 · 3 좌상. 대각선에 보가 생기고 남은 삼각형이 바닥 */
+  cuts?: [number, number, 0 | 1 | 2 | 3][]
   material: 'Q235B' | 'Q355B'
   sections: Record<FrameRole, string>
   braces: BraceBay[]
@@ -75,6 +77,8 @@ export interface FrameElement {
   story: number
   /** 보·가새: 골조 방향과 골조선 좌표 */
   axis?: Axis; line?: number
+  /** 삼각 패널의 대각선 보 */
+  diagonal?: boolean
   /** 설계 부재(분할 전 보 전체) 번호 — 같은 값의 요소는 한 부재 */
   member: number
   /** 외곽 보 여부 (선하중 대상) */

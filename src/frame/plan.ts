@@ -1,7 +1,49 @@
-/* 평면 형상 편집 (순수) — 패널(격자 칸) 켜기/끄기, 형상 프리셋, 가새 베이 정리, 스팬 변경 시 번호 유지.
-   패널 (i, j) = xs[i]~xs[i+1] × ys[j]~ys[j+1]. 형상은 spec.removed(뺀 패널 번호)로만 저장 → 스팬 길이를 바꿔도 모양 유지 */
+/* 평면 형상 편집 (순수) — 패널(격자 칸) 상태, 형상 프리셋, 삼각형 자르기, 스팬 삽입·삭제, 가새 베이 정리.
+   패널 (i, j) = xs[i]~xs[i+1] × ys[j]~ys[j+1]. 상태: 전체 / 없음(spec.removed) / 삼각(spec.cuts, 한 모서리를 대각선으로 잘라냄).
+   형상은 번호로만 저장 → 스팬 길이를 바꿔도 모양 유지, 스팬을 넣고 빼면 번호를 밀어서 유지. geometry.ts 가 이 규칙으로 절점·보를 만든다 */
 import type { Axis, BraceBay, FrameSpec } from './types'
 
+/** 패널 모서리: 0 = 좌하(SW), 1 = 우하(SE), 2 = 우상(NE), 3 = 좌상(NW) */
+export type Corner = 0 | 1 | 2 | 3
+/** 모서리의 격자점 오프셋 [di, dj] */
+export const CORNER_OFF: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 1]]
+/** 변: 아래(SW–SE), 오른쪽(SE–NE), 위(NE–NW), 왼쪽(NW–SW) — 양 끝 모서리 */
+export const SIDES = { bottom: [0, 1], right: [1, 2], top: [2, 3], left: [3, 0] } as const
+export type Side = keyof typeof SIDES
+
+export type PanelState = 'full' | 'off' | Corner
+
+export function panelState(spec: FrameSpec, i: number, j: number): PanelState {
+  if (i < 0 || j < 0 || i >= spec.xs.length - 1 || j >= spec.ys.length - 1) return 'off'
+  if (spec.removed.some(([a, b]) => a === i && b === j)) return 'off'
+  const c = (spec.cuts ?? []).find(([a, b]) => a === i && b === j)
+  return c ? c[2] : 'full'
+}
+export const panelOn = (spec: FrameSpec, i: number, j: number) => panelState(spec, i, j) !== 'off'
+export function cornerKept(spec: FrameSpec, i: number, j: number, c: Corner): boolean {
+  const s = panelState(spec, i, j)
+  return s !== 'off' && s !== c
+}
+export function sideKept(spec: FrameSpec, i: number, j: number, side: Side): boolean {
+  const s = panelState(spec, i, j)
+  return s !== 'off' && !(SIDES[side] as readonly number[]).includes(s as number)
+}
+/** 삼각 패널의 대각선 양 끝 모서리 (잘린 모서리의 이웃 둘) */
+export const diagonalOf = (cut: Corner): [Corner, Corner] => [((cut + 1) % 4) as Corner, ((cut + 3) % 4) as Corner]
+/** 남은 모서리 (반시계) */
+export const keptCorners = (s: PanelState): Corner[] => s === 'off' ? [] : ([0, 1, 2, 3] as Corner[]).filter((c) => c !== s)
+
+/** 삼각 도구 — 누른 모서리 c 에 따른 다음 상태.
+    빈 칸: c 를 포함하는 삼각형을 붙임(맞은편 모서리를 자른 상태) · 전체 칸: c 를 잘라냄
+    삼각 칸: 잘린 모서리 → 전체로 복구, 직각 모서리(잘린 것의 맞은편) → 지움, 대각선 끝 → 그쪽으로 돌림 */
+export function triNext(st: PanelState, c: Corner): PanelState {
+  const opp = ((c + 2) % 4) as Corner
+  if (st === 'off') return opp
+  if (st === 'full') return c
+  if (st === c) return 'full'
+  if (st === opp) return 'off'
+  return c
+}
 export const PLAN_SHAPES = ['rect', 'L', 'T', 'cross', 'U', 'E', 'court'] as const
 export type PlanShape = (typeof PLAN_SHAPES)[number]
 
@@ -30,36 +72,48 @@ export function shapeRemoved(shape: PlanShape, n: number, m: number): [number, n
   return out
 }
 
-const isOff = (spec: FrameSpec, i: number, j: number) => spec.removed.some(([a, b]) => a === i && b === j)
-
-export function setPanel(spec: FrameSpec, i: number, j: number, on: boolean): void {
-  spec.removed = spec.removed.filter(([a, b]) => !(a === i && b === j))
-  if (!on) spec.removed.push([i, j])
+export function applyShape(spec: FrameSpec, shape: PlanShape): void {
+  spec.removed = shapeRemoved(shape, spec.xs.length - 1, spec.ys.length - 1)
+  spec.cuts = []
+  pruneBraces(spec)
 }
 
-/** 패널 연결성 (4방향) — 떨어진 덩어리가 있으면 false */
+/** 패널 상태 설정 (전체 / 없음 / 삼각) */
+export function setPanelState(spec: FrameSpec, i: number, j: number, s: PanelState): void {
+  spec.removed = spec.removed.filter(([a, b]) => !(a === i && b === j))
+  spec.cuts = (spec.cuts ?? []).filter(([a, b]) => !(a === i && b === j))
+  if (s === 'off') spec.removed.push([i, j])
+  else if (s !== 'full') spec.cuts.push([i, j, s])
+  pruneBraces(spec)
+}
+export const setPanel = (spec: FrameSpec, i: number, j: number, on: boolean) => setPanelState(spec, i, j, on ? 'full' : 'off')
+
+/** 패널 연결성 — 두 패널이 공유 변을 모두 가지고 있을 때 이어진 것으로 본다 (삼각 패널 포함) */
 export function planConnected(spec: FrameSpec): boolean {
   const n = spec.xs.length - 1, m = spec.ys.length - 1
   const on: [number, number][] = []
-  for (let j = 0; j < m; j++) for (let i = 0; i < n; i++) if (!isOff(spec, i, j)) on.push([i, j])
+  for (let j = 0; j < m; j++) for (let i = 0; i < n; i++) if (panelOn(spec, i, j)) on.push([i, j])
   if (!on.length) return false
+  const link: [number, number, Side, Side][] = [[1, 0, 'right', 'left'], [-1, 0, 'left', 'right'], [0, 1, 'top', 'bottom'], [0, -1, 'bottom', 'top']]
   const seen = new Set([`${on[0][0]},${on[0][1]}`]), stack = [on[0]]
   while (stack.length) {
     const [i, j] = stack.pop()!
-    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const k = `${i + di},${j + dj}`
-      if (seen.has(k) || i + di < 0 || j + dj < 0 || i + di >= n || j + dj >= m || isOff(spec, i + di, j + dj)) continue
-      seen.add(k); stack.push([i + di, j + dj])
+    for (const [di, dj, s1, s2] of link) {
+      const a = i + di, b = j + dj, k = `${a},${b}`
+      if (seen.has(k) || !panelOn(spec, a, b) || !sideKept(spec, i, j, s1) || !sideKept(spec, a, b, s2)) continue
+      seen.add(k); stack.push([a, b])
     }
   }
   return seen.size === on.length
 }
 
-/** 보가 있는 격자 변 — X: (i,j)-(i+1,j), Y: (i,j)-(i,j+1) */
+/** 보가 있는 격자 변 — X: (i,j)-(i+1,j), Y: (i,j)-(i,j+1). 인접 패널 중 하나라도 그 변을 가지면 있음 */
 export function edgeExists(spec: FrameSpec, axis: Axis, i: number, j: number): boolean {
-  const n = spec.xs.length - 1, m = spec.ys.length - 1
-  const P = (a: number, b: number) => a >= 0 && b >= 0 && a < n && b < m && !isOff(spec, a, b)
-  return axis === 'X' ? i >= 0 && i < n && (P(i, j - 1) || P(i, j)) : j >= 0 && j < m && (P(i - 1, j) || P(i, j))
+  return axis === 'X' ? sideKept(spec, i, j - 1, 'top') || sideKept(spec, i, j, 'bottom') : sideKept(spec, i - 1, j, 'right') || sideKept(spec, i, j, 'left')
+}
+/** 외곽 변 (한쪽 패널만 가짐) — 외곽 보 선하중·외곽 길이 */
+export function edgeIsPerimeter(spec: FrameSpec, axis: Axis, i: number, j: number): boolean {
+  return axis === 'X' ? sideKept(spec, i, j - 1, 'top') !== sideKept(spec, i, j, 'bottom') : sideKept(spec, i - 1, j, 'right') !== sideKept(spec, i, j, 'left')
 }
 
 /** 가새 → 베이 번호 목록 (격자에 없는 것은 버림) */
@@ -93,15 +147,81 @@ export function toggleBrace(spec: FrameSpec, axis: Axis, i: number, j: number): 
   spec.braces = baysToBraces(spec, bays)
 }
 
-/** 스팬 변경 — 패널·가새를 번호로 유지 (범위 밖은 버림) */
+/** 형상 변경 후 — 평면 밖이 된 가새 정리 */
+export function pruneBraces(spec: FrameSpec): void {
+  spec.braces = baysToBraces(spec, braceBays(spec))
+}
+
+const r6 = (v: number) => +v.toFixed(6)
+export const spansOf = (a: number[]) => a.slice(1).map((v, i) => r6(v - a[i]))
+export const coordsOf = (spans: number[], start = 0) => spans.reduce<number[]>((acc, s) => [...acc, r6(acc.at(-1)! + s)], [start])
+
+/** 스팬 길이·개수 변경 (끝에서 늘리고 줄임) — 패널·가새는 번호로 유지 (범위 밖은 버림) */
 export function setGrid(spec: FrameSpec, xs: number[], ys: number[]): void {
   const bays = braceBays(spec)
   spec.xs = xs; spec.ys = ys
   spec.removed = spec.removed.filter(([i, j]) => i < xs.length - 1 && j < ys.length - 1)
+  spec.cuts = (spec.cuts ?? []).filter(([i, j]) => i < xs.length - 1 && j < ys.length - 1)
   spec.braces = baysToBraces(spec, bays)
 }
 
-/** 형상 변경 후 — 평면 밖이 된 가새 정리 */
-export function pruneBraces(spec: FrameSpec): void {
-  spec.braces = baysToBraces(spec, braceBays(spec))
+/** 방향 axis 의 스팬 번호 at 위치에 길이 len 스팬 삽입 — 그 뒤 패널·가새 번호를 한 칸 민다. 새 스팬의 패널은 옆 스팬과 같은 상태(삼각은 전체) */
+export function insertSpan(spec: FrameSpec, axis: Axis, at: number, len: number): void {
+  const bays = braceBays(spec)
+  const shift = (v: number) => (v >= at ? v + 1 : v)
+  const src = Math.min(at, (axis === 'X' ? spec.xs : spec.ys).length - 2)  // 복사할 이웃 스팬
+  const copyOff = spec.removed.filter(([i, j]) => (axis === 'X' ? i : j) === src).map(([i, j]): [number, number] => axis === 'X' ? [at, j] : [i, at])
+  spec.removed = [...spec.removed.map(([i, j]): [number, number] => axis === 'X' ? [shift(i), j] : [i, shift(j)]), ...copyOff]
+  spec.cuts = (spec.cuts ?? []).map(([i, j, c]): [number, number, Corner] => axis === 'X' ? [shift(i), j, c] : [i, shift(j), c])
+  const sp = spansOf(axis === 'X' ? spec.xs : spec.ys); sp.splice(at, 0, len)
+  const co = coordsOf(sp, (axis === 'X' ? spec.xs : spec.ys)[0])
+  if (axis === 'X') spec.xs = co; else spec.ys = co
+  /* 가새: 스팬 방향 번호는 밀고, 직교 격자선 번호(새 격자선이 at+1 에 생김)도 민다 */
+  spec.braces = baysToBraces(spec, bays.map((b) => {
+    if (axis === 'X') return b.axis === 'X' ? { ...b, i: shift(b.i) } : { ...b, i: b.i > at ? b.i + 1 : b.i }
+    return b.axis === 'Y' ? { ...b, j: shift(b.j) } : { ...b, j: b.j > at ? b.j + 1 : b.j }
+  }))
+}
+
+/** 스팬 at 삭제 — 그 스팬의 패널·가새는 버리고 뒤 번호를 당긴다 (스팬 1개는 남김) */
+export function deleteSpan(spec: FrameSpec, axis: Axis, at: number): void {
+  const arr = axis === 'X' ? spec.xs : spec.ys
+  if (arr.length <= 2) return
+  const bays = braceBays(spec)
+  const pull = (v: number) => (v > at ? v - 1 : v)
+  const idx = (i: number, j: number) => (axis === 'X' ? i : j)
+  spec.removed = spec.removed.filter(([i, j]) => idx(i, j) !== at).map(([i, j]): [number, number] => axis === 'X' ? [pull(i), j] : [i, pull(j)])
+  spec.cuts = (spec.cuts ?? []).filter(([i, j]) => idx(i, j) !== at).map(([i, j, c]): [number, number, Corner] => axis === 'X' ? [pull(i), j, c] : [i, pull(j), c])
+  const sp = spansOf(arr); sp.splice(at, 1)
+  const co = coordsOf(sp, arr[0])
+  if (axis === 'X') spec.xs = co; else spec.ys = co
+  /* 격자선 at+1 이 사라짐: 스팬 방향 베이 at 은 버리고, 그 격자선 위 직교 가새도 버림 */
+  spec.braces = baysToBraces(spec, bays.flatMap((b) => {
+    if (axis === 'X') { if (b.axis === 'X') return b.i === at ? [] : [{ ...b, i: pull(b.i) }]; return b.i === at + 1 ? [] : [{ ...b, i: b.i > at + 1 ? b.i - 1 : b.i }] }
+    if (b.axis === 'Y') return b.j === at ? [] : [{ ...b, j: pull(b.j) }]
+    return b.j === at + 1 ? [] : [{ ...b, j: b.j > at + 1 ? b.j - 1 : b.j }]
+  }))
+}
+
+/** 스팬 목록 입력 "6, 6, 8" 또는 줄임 "4@6, 8" (6 m 4개 + 8 m) → 스팬 배열 (잘못된 입력은 null) */
+export function parseSpans(text: string): number[] | null {
+  const out: number[] = []
+  for (const tok of text.split(/[,\s，、]+/).filter(Boolean)) {
+    const m = tok.match(/^(\d+)\s*[@*×x]\s*(\d*\.?\d+)$/i)
+    if (m) { const n = +m[1], L = +m[2]; if (!(n >= 1 && n <= 100 && L > 0)) return null; for (let k = 0; k < n; k++) out.push(L); continue }
+    const v = Number(tok)
+    if (!(Number.isFinite(v) && v > 0)) return null
+    out.push(v)
+  }
+  return out.length && out.length <= 100 ? out : null
+}
+/** 스팬 배열 → 줄임 표기 ("6, 6, 6, 8" → "3@6, 8") */
+export function formatSpans(sp: number[]): string {
+  const out: string[] = []
+  for (let k = 0; k < sp.length;) {
+    let e = k; while (e + 1 < sp.length && sp[e + 1] === sp[k]) e++
+    const n = e - k + 1
+    out.push(n > 1 ? `${n}@${sp[k]}` : String(sp[k])); k = e + 1
+  }
+  return out.join(', ')
 }

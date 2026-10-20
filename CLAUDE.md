@@ -12,6 +12,8 @@
 - 화면은 골조 전용: `src/components/frame/*`(작업 흐름·8단계 모델링·3D·결과), 상태 `src/frame/state.ts`, 작업 `src/actions/frame.ts`. App 셸·헤더·연결·JobBar·로그는 공장 앱 것을 그대로 쓴다.
 - 엔진 `src/frame/*`(형상·하중·Gen 페이로드·결과 회수·층 검토·부재 검토), 규준 식 `src/codes/cnFrameSteel.ts`. 평면 형상은 뺀 패널 번호(`spec.removed`)로 저장하고 편집 규칙은 `src/frame/plan.ts`.
 - Gen 단계(전송·해석·회수)는 `src/frame/run.ts` 하나를 화면과 `scripts/live-frame.ts`가 같이 쓴다. 순서를 바꾸면 둘 다 바뀐다.
+- 산출물: 계산서 HTML `src/frame/report.ts` → 공장 변환기 `report/pdf.ts`·`report/docx.ts`(그 변환기가 읽는 태그만 사용), 도면 `src/frame/drawings.ts`(공장 `drawing/dxf.ts`로 DXF·SVG 동시). 단면 최적화 `src/frame/optimize.ts`(순수) + `actions/frame.ts optimizeFrame`(Gen 재생성 반복). 회귀 `scripts/verify-frame-report.ts`.
+- 계산서 문구에 새 글자를 넣으면 `python scripts/subset-fonts.py <Noto CJK OTF 폴더>`로 글꼴을 다시 만든다(verify 가 누락 글자를 잡는다). 아래첨자 숫자(₀₁)는 Noto 에 없어 계산서에서 보통 숫자로 바꾼다.
 - 공장 앱 화면·도메인 코드(`domain/*`, `components/` 공장용, 관련 verify)는 아직 남아 있다(회귀용). 화면에서는 쓰지 않는다. 정리는 별도 단계.
 - Gen 자동 저장 파일은 `sf_` 접두(`sf_backup_*`, `sf_model_*`, 스크립트 `sf_frame_*`).
 
