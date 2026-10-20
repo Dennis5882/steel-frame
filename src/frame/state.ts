@@ -108,6 +108,14 @@ export function frameBlocker(task: FrameTask): 'busy' | 'flow_need_model' | 'wf_
   return null
 }
 
+/* 산출물별 선행 조건 — 카드 안내와 실행 함수가 같이 쓴다. 'stale' 은 단계 안내(frameBlocker)가 이미 보이지만 실행 함수도 같은 판정을 따른다 */
+export type FrameOutNeed = 'analysis' | 'design'
+export function frameOutputBlocker(need?: FrameOutNeed): 'stale' | 'need' | null {
+  if (!need) return null
+  if (frameStale(F)) return 'stale'
+  return (need === 'analysis' ? F.analysis : F.design) ? null : 'need'
+}
+
 export function frameTaskStatus(task: FrameTask): FrameTaskStatus {
   if (S.job && JOB_TASK[S.job.kind] === task) return 'running'
   if (task !== 'model' && frameStale(F)) return 'stale'

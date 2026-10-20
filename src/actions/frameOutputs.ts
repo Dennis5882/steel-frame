@@ -12,7 +12,7 @@ import { frameQuantitySheet } from '../frame/quantitySheet'
 import { quantityCsv } from '../report/quantitySheet'
 import { Cancelled, beginJob, checkCancel, endJob, failMsg, stage } from './job'
 import { mapi } from '../mapi/client'
-import { frameStale } from '../frame/state'
+import { frameOutputBlocker } from '../frame/state'
 import { captureShots } from '../frame/captures'
 import { captureGen } from '../frame/run'
 import type { Request } from '../frame/results'
@@ -144,8 +144,8 @@ const genDir = () => S.saveDir.trim().replace(/\\/g, '/').replace(/\/+$/, '') ||
     폴더 고르기는 클릭 직후(사용자 동작 안)에 먼저 한다. Gen 문서가 이 모델이 아니면(절점 수 다름) 캡처하지 않는다 */
 export async function downloadFrameDetailedDocx(): Promise<void> {
   if (!ready()) return
-  if (!F.analysis) { addMsg('bot', lt('fr_detail_need_anal'), 'warn'); return }
-  if (frameStale(F)) { addMsg('bot', lt('wf_stale_edited'), 'warn'); return }
+  const block = frameOutputBlocker('analysis') // 카드 안내와 같은 판정
+  if (block) { addMsg('bot', lt(block === 'stale' ? 'wf_stale_edited' : 'fr_detail_need_anal'), 'warn'); return }
   if (!folderAccessSupported()) { addMsg('bot', lt('fr_detail_no_fs'), 'warn'); return }
   let dir
   try { dir = await pickGenFolder() } catch { return } // 사용자가 폴더 선택을 취소

@@ -8,7 +8,7 @@ import { recordArtifact, tab } from '../../state/ui'
 import { confirmAction } from '../ConfirmDialog'
 import { JobBar } from '../JobBar'
 import { ActivityHistory, ArtifactList, NoticeCenter } from '../ActivityViews'
-import { F, frameBlocker, frameStale, frameTaskStatus, resetFrame, startTemplate, type FrameTask } from '../../frame/state'
+import { F, frameBlocker, frameOutputBlocker, frameStale, frameTaskStatus, resetFrame, startTemplate, type FrameOutNeed, type FrameTask } from '../../frame/state'
 import { analyzeFrame, designFrame, optimizeFrame, restoreFrameBackup } from '../../actions/frame'
 import { downloadFrameDetailedDocx, downloadFrameDrawingsPdf, downloadFrameDxf, downloadFrameQuantities, downloadFrameReportDocx, downloadFrameReportPdf, openFrameReport } from '../../actions/frameOutputs'
 import { OPT_MAX_ITER, OPT_TARGET } from '../../frame/optimize'
@@ -63,7 +63,7 @@ export function FrameTaskNav({ collapsed, onToggle, onOpenMapi }: { collapsed: b
 /* 결과 CSV — 부재 검토 + 층 검토 */
 function downloadCsv() {
   const D = F.design, R = F.review
-  if (!D) return
+  if (!D || frameOutputBlocker('design')) return
   const q = (v: unknown) => `"${String(v).replace(/"/g, '""')}"`
   const lines = [['member', 'role', 'story', 'section', 'L_m', 'muX', 'muY', 'combo', 'governing', 'ratio', 'detailRatio', 'grade'].join(',')]
   for (const m of D.members) lines.push([m.id, m.role, m.story, q(m.section), m.L.toFixed(3), m.muX.toFixed(3), m.muY.toFixed(3), m.worst.combo, m.worst.governing, m.ratio.toFixed(4), m.detailRatio.toFixed(4), memberGradeOf(m)].join(','))
@@ -79,29 +79,32 @@ function downloadCsv() {
 }
 
 /* 산출물 카드 — 형식을 고른 뒤 한 번에 추출 (공장 TaskStage ExportCard 와 같은 모양). 고른 형식은 이 브라우저에 기억 */
-type FrameOut = { id: string; title: I18nKey; hint: I18nKey; Icon: typeof FileText; formats: [string, string, () => void][]; needDesign?: boolean; needAnalysis?: boolean }
+/* need = 선행 조건(frameOutputBlocker), needHint = 조건이 안 됐을 때 카드에 보이는 이유 */
+type FrameOut = { id: string; title: I18nKey; hint: I18nKey; Icon: typeof FileText; formats: [string, string, () => void][]; need?: FrameOutNeed; needHint?: I18nKey }
 const FRAME_OUTPUTS: FrameOut[] = [
   { id: 'report', title: 'out_report', hint: 'fr_out_report_hint', Icon: FileText, formats: [['pdf', 'PDF', () => void downloadFrameReportPdf()], ['docx', 'Word', () => void downloadFrameReportDocx()], ['html', 'HTML', openFrameReport]] },
-  { id: 'detail', title: 'fr_out_detail', hint: 'fr_out_detail_hint', Icon: Camera, formats: [['docx', 'Word', () => void downloadFrameDetailedDocx()]], needAnalysis: true },
+  { id: 'detail', title: 'fr_out_detail', hint: 'fr_out_detail_hint', Icon: Camera, formats: [['docx', 'Word', () => void downloadFrameDetailedDocx()]], need: 'analysis', needHint: 'fr_detail_need_anal' },
   { id: 'drawings', title: 'out_drawings', hint: 'fr_out_dwg_hint', Icon: Ruler, formats: [['pdf', 'PDF', () => void downloadFrameDrawingsPdf()], ['dxf', 'DXF', downloadFrameDxf]] },
   { id: 'quantities', title: 'out_quantities', hint: 'fr_out_qty_hint', Icon: Table2, formats: [['xlsx', 'XLSX', () => void downloadFrameQuantities('xlsx')], ['csv', 'CSV', () => void downloadFrameQuantities('csv')]] },
-  { id: 'csv', title: 'fr_out_csv', hint: 'fr_out_csv_hint', Icon: ClipboardCheck, formats: [['csv', 'CSV', downloadCsv]], needDesign: true },
+  { id: 'csv', title: 'fr_out_csv', hint: 'fr_out_csv_hint', Icon: ClipboardCheck, formats: [['csv', 'CSV', downloadCsv]], need: 'design', needHint: 'fr_csv_need_design' },
 ]
 function FrameExportCard({ out, disabled }: { out: FrameOut; disabled: boolean }) {
   const key = `sf_format_${out.id}`
   const [fmt, setFmt] = useState(() => { try { const v = localStorage.getItem(key); return out.formats.find(([f]) => f === v)?.[0] ?? out.formats[0][0] } catch { return out.formats[0][0] } })
   const pick = (f: string) => { setFmt(f); try { localStorage.setItem(key, f) } catch { /* private mode */ } }
-  /* 해석 전 상세 계산서는 막지 않고 이유를 카드에 보인다 (눌러도 같은 안내) — 말없이 비활성이면 왜 안 되는지 모름 */
-  const off = disabled || (!!out.needDesign && !F.design)
-  const why = !disabled && out.needAnalysis && !F.analysis ? t('fr_detail_need_anal') : null
+  /* 선행 조건이 안 되면 버튼을 끄고 이유를 카드에 보인다 — 말없이 비활성이면 왜 안 되는지 모름. 고정 안내라 라이브 영역 대신 버튼 설명으로 연결 */
+  const block = disabled ? null : frameOutputBlocker(out.need)
+  const off = disabled || !!block
+  const whyId = `fr-out-why-${out.id}`
+  const why = block === 'stale' ? t('fr_stale') : block === 'need' && out.needHint ? t(out.needHint) : null
   return <div className="report-export">
     <div className="report-export-head"><out.Icon size={22} /><strong>{t(out.title)}</strong></div>
     <p className="pe-tip">{t(out.hint)}</p>
-    {why && <p className="task-warning" role="status">{why}</p>}
+    {why && <p className="task-warning" id={whyId}>{why}</p>}
     <div className="report-export-row">
       {out.formats.length > 1 ? <div className="report-formats" role="radiogroup" aria-label={t('out_format')}>{out.formats.map(([f, label]) =>
         <button key={f} type="button" role="radio" aria-checked={fmt === f} className={fmt === f ? 'on' : ''} onClick={() => pick(f)}>{label}</button>)}</div> : <span />}
-      <button className="btn btn-c" disabled={off} onClick={() => out.formats.find(([f]) => f === fmt)![2]()}><Download size={15} />{t('out_export')}</button>
+      <button className="btn btn-c" disabled={off} aria-describedby={why ? whyId : undefined} onClick={() => out.formats.find(([f]) => f === fmt)![2]()}><Download size={15} />{t('out_export')}</button>
     </div>
   </div>
 }
