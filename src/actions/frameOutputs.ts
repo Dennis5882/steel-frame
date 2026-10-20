@@ -13,7 +13,6 @@ import { quantityCsv } from '../report/quantitySheet'
 import { Cancelled, beginJob, checkCancel, endJob, failMsg, stage } from './job'
 import { mapi } from '../mapi/client'
 import { outputBlocker, outputState, type FrameOutput } from '../frame/state'
-import { memberFails } from '../frame/design'
 import { captureShots } from '../frame/captures'
 import { captureGen } from '../frame/run'
 import type { Request } from '../frame/results'
@@ -138,19 +137,16 @@ export async function downloadFrameQuantities(format: 'csv' | 'xlsx'): Promise<v
   addMsg('bot', lt('fr_qty_done', q.memberT.toFixed(2), q.orderT.toFixed(2)))
 }
 
-/** 검토 결과 CSV — 부재 검토 + 층 검토 (UTF-8 BOM, 엑셀에서 바로 열림). 등급은 화면 memberGradeOf 와 같은 규칙 */
-export function downloadFrameCheckCsv(): void {
-  if (!outputReady('csv')) return
-  const D = F.design!, R = F.review
-  const q = (v: unknown) => `"${String(v).replace(/"/g, '""')}"`
-  const lines = [['member', 'role', 'story', 'section', 'L_m', 'muX', 'muY', 'combo', 'governing', 'ratio', 'detailRatio', 'grade'].join(',')]
-  for (const m of D.members) lines.push([m.id, m.role, m.story, q(m.section), m.L.toFixed(3), m.muX.toFixed(3), m.muY.toFixed(3), m.worst.combo, m.worst.governing, m.ratio.toFixed(4), m.detailRatio.toFixed(4), memberFails(m) ? 'fail' : 'expert'].join(','))
-  if (R) {
-    lines.push('', ['item', 'dir', 'clause', 'story', 'value', 'limit', 'status'].join(','))
-    for (const it of R) for (const r of it.rows) lines.push([it.key, it.dir ?? '', q(it.clause), r.story, r.value, r.limit, r.status].join(','))
-  }
-  downloadBlob(`steel_frame_check_${stamp()}.csv`, new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
-  log(t('fr_log_check_csv'), 'ok')
+/** 검토 결과 — Excel(.xlsx) 또는 CSV. 물량 산출서와 같은 작성기·같은 시트(화면 언어, 부재 검토 + 층 검토) */
+export async function downloadFrameChecks(format: 'csv' | 'xlsx'): Promise<void> {
+  if (!outputReady('checks')) return
+  const { frameCheckSheet } = await import('../frame/checkSheet')
+  const sheet = frameCheckSheet(F.built!.spec, F.design!, F.review)
+  if (format === 'xlsx') {
+    const { createXlsx } = await import('../report/xlsx')
+    downloadBlob(`steel_frame_checks_${stamp()}.xlsx`, await createXlsx(sheet))
+  } else downloadBlob(`steel_frame_checks_${stamp()}.csv`, new Blob([quantityCsv(sheet)], { type: 'text/csv;charset=utf-8' }))
+  log(t('fr_log_checks', format.toUpperCase()), 'ok')
 }
 
 const req: Request = (m, p, b) => mapi(m, p, b as Record<string, unknown> | undefined)

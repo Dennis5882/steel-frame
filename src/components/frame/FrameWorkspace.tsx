@@ -10,7 +10,7 @@ import { JobBar } from '../JobBar'
 import { ActivityHistory, ArtifactList, NoticeCenter } from '../ActivityViews'
 import { F, frameBlocker, frameStale, frameTaskStatus, outputBlocker, outputState, resetFrame, startTemplate, type FrameOutput, type FrameTask, type OutputState } from '../../frame/state'
 import { analyzeFrame, designFrame, optimizeFrame, restoreFrameBackup } from '../../actions/frame'
-import { downloadFrameDetailedDocx, downloadFrameDrawingsPdf, downloadFrameDxf, downloadFrameQuantities, downloadFrameReportDocx, downloadFrameReportPdf, downloadFrameCheckCsv, openFrameReport } from '../../actions/frameOutputs'
+import { downloadFrameDetailedDocx, downloadFrameDrawingsPdf, downloadFrameDxf, downloadFrameQuantities, downloadFrameReportDocx, downloadFrameReportPdf, downloadFrameChecks, openFrameReport } from '../../actions/frameOutputs'
 import { OPT_MAX_ITER, OPT_TARGET } from '../../frame/optimize'
 import { FrameWizard } from './FrameWizard'
 import type { FrameTemplateKey } from '../../frame/templates'
@@ -68,7 +68,7 @@ const FRAME_OUTPUTS: FrameOut[] = [
   { id: 'detail', title: 'fr_out_detail', hint: 'fr_out_detail_hint', Icon: Camera, formats: [['docx', 'Word', () => void downloadFrameDetailedDocx()]] },
   { id: 'drawings', title: 'out_drawings', hint: 'fr_out_dwg_hint', Icon: Ruler, formats: [['pdf', 'PDF', () => void downloadFrameDrawingsPdf()], ['dxf', 'DXF', downloadFrameDxf]] },
   { id: 'quantities', title: 'out_quantities', hint: 'fr_out_qty_hint', Icon: Table2, formats: [['xlsx', 'XLSX', () => void downloadFrameQuantities('xlsx')], ['csv', 'CSV', () => void downloadFrameQuantities('csv')]] },
-  { id: 'csv', title: 'fr_out_csv', hint: 'fr_out_csv_hint', Icon: ClipboardCheck, formats: [['csv', 'CSV', downloadFrameCheckCsv]] },
+  { id: 'checks', title: 'fr_out_checks', hint: 'fr_out_checks_hint', Icon: ClipboardCheck, formats: [['xlsx', 'XLSX', () => void downloadFrameChecks('xlsx')], ['csv', 'CSV', () => void downloadFrameChecks('csv')]] },
 ]
 function FrameExportCard({ out, os, disabled }: { out: FrameOut; os: OutputState; disabled: boolean }) {
   const key = `sf_format_${out.id}`

@@ -43,12 +43,14 @@ const STORY_GR: Record<StoryStatus, string> = { ok: 'pass', warn: 'prelim', ng: 
 const storyChip = (s: StoryStatus) => `<span class="gr gr-${STORY_GR[s]}">${L(`fr_st_${s}` as I18nKey)}</span>`
 const memberChip = (m: MemberDesign) => memberFails(m) ? `<span class="gr gr-fail">${L('gr_fail')}</span>` : `<span class="gr gr-expert">${L('fr_gr_expert')}</span>`
 
-const CHECK: Record<string, I18nKey> = {
+/** 지배 검토 항목 이름 (계산서·검토 결과 시트 공통) */
+export const CHECK_NAME: Record<string, I18nKey> = {
   strength: 'fr_gov_strength', shear: 'fr_gov_shear', ltb: 'fr_gov_ltb', stabilityX: 'fr_gov_stabx', stabilityY: 'fr_gov_staby',
   braceComp: 'fr_gov_bracecomp', braceTens: 'fr_gov_braceten', web: 'fr_gov_web', slender: 'rp_ck_slender', flange: 'rp_ck_flange',
 }
-const checkName = (k: string) => (CHECK[k] ? L(CHECK[k]) : esc(k))
-const storyValue = (it: StoryItem, v: number) => (it.key === 'drift' ? `1/${Math.round(1 / v)}` : f(v, 3))
+const checkName = (k: string) => (CHECK_NAME[k] ? L(CHECK_NAME[k]) : esc(k))
+/** 층 검토 값 표기 — 층간변위각은 1/n (계산서·검토 결과 시트 공통) */
+export const storyValue = (it: StoryItem, v: number) => (it.key === 'drift' ? `1/${Math.round(1 / v)}` : f(v, 3))
 
 /** 등각 3D — 부재 종류 색 또는 응력비 색 (공장 iso 를 그대로: 보 = 'rafter' 색) */
 function frameIso(model: FrameModel, design: FrameDesign | null): string {

@@ -14,7 +14,8 @@
 - Gen 단계(전송·해석·회수)는 `src/frame/run.ts` 하나를 화면과 `scripts/live-frame.ts`가 같이 쓴다. 순서를 바꾸면 둘 다 바뀐다.
 - 산출물: 계산서 HTML `src/frame/report.ts` → 공장 변환기 `report/pdf.ts`·`report/docx.ts`(그 변환기가 읽는 태그만 사용), 도면 `src/frame/drawings.ts`(공장 `drawing/dxf.ts`로 DXF·SVG 동시). 단면 최적화 `src/frame/optimize.ts`(순수) + `actions/frame.ts optimizeFrame`(Gen 재생성 반복). 회귀 `scripts/verify-frame-report.ts`.
 - 상세 계산서(Gen NX 캡처): 캡처 목록 `src/frame/captures.ts`, 실행 `run.ts captureGen`, 폴더 읽기 `src/lib/genFolder.ts`, 라이브 `scripts/live-detail.ts`·탐색 `scripts/live-capture.ts`. 캡처 PNG 는 Gen 이 저장 폴더에 쓰고 앱은 사용자가 허용한 폴더에서 읽는다(`gen-api-cautions.md` 8). 공용 변환기 `report/docx.ts`·`pdf.ts` 에 `<img>` data URL 그림 지원을 추가했다(공장 계산서는 SVG 만 써서 영향 없음).
-- 물량 산출서 값 `src/frame/quantities.ts`(순수), 시트 `src/frame/quantitySheet.ts`(공장 `report/xlsx.ts` 작성기).
+- 물량 산출서 값 `src/frame/quantities.ts`(순수), 시트 `src/frame/quantitySheet.ts`(공장 `report/xlsx.ts` 작성기). 검토 결과 시트 `src/frame/checkSheet.ts`(같은 작성기, CSV·XLSX 공통).
+- 산출물 선행 조건은 `state.ts outputBlocker` 하나(단계 안내·카드·모든 내보내기 공통). 새 산출물·조건은 `OUTPUT_RULES` 에 추가한다.
 - 계산서 문구에 새 글자를 넣으면 `python scripts/subset-fonts.py <Noto CJK OTF 폴더>`로 글꼴을 다시 만든다(verify 가 누락 글자를 잡는다). 아래첨자 숫자(₀₁)는 Noto 에 없어 계산서에서 보통 숫자로 바꾼다.
 - 공장 앱 화면·도메인 코드(`domain/*`, `components/` 공장용, 관련 verify)는 아직 남아 있다(회귀용). 화면에서는 쓰지 않는다. 정리는 별도 단계.
 - Gen 자동 저장 파일은 `sf_` 접두(`sf_backup_*`, `sf_model_*`, 스크립트 `sf_frame_*`).

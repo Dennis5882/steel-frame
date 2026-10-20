@@ -115,13 +115,13 @@ export function frameBlocker(task: FrameTask): OutputBlock | 'wf_stale_edited' |
    순수 함수: 상태 스냅샷(outputState)을 받아 verify 에서 고정 상태로 검사한다. 입력 변경(stale)은 스냅샷에서 한 번만 계산한다.
    산출물을 지정하지 않으면 단계 전체 판정(작업 중·모델 없음·입력 변경), 지정하면 그 산출물의 조건(Gen 연결·필요한 결과)까지 본다.
    돌려주는 값이 곧 이유 문구 키다. 모델만 있으면 계산서·도면·물량은 낸다(해석·검토 전 부분은 '없음' 표시) */
-export type FrameOutput = 'report' | 'detail' | 'drawings' | 'quantities' | 'csv'
-const OUTPUT_RULES: Partial<Record<FrameOutput, { gen?: true; need?: ['analysis' | 'design', 'fr_detail_need_anal' | 'fr_csv_need_design'] }>> = {
+export type FrameOutput = 'report' | 'detail' | 'drawings' | 'quantities' | 'checks'
+const OUTPUT_RULES: Partial<Record<FrameOutput, { gen?: true; need?: ['analysis' | 'design', 'fr_detail_need_anal' | 'fr_checks_need_design'] }>> = {
   detail: { gen: true, need: ['analysis', 'fr_detail_need_anal'] }, // Gen NX 화면을 캡처한다
-  csv: { need: ['design', 'fr_csv_need_design'] },
+  checks: { need: ['design', 'fr_checks_need_design'] },
 }
 export type OutputState = Pick<FrameState, 'built' | 'analysis' | 'design'> & { busy: boolean; stale: boolean; connected: boolean }
-export type OutputBlock = 'busy' | 'flow_need_model' | 'fr_out_stale' | 'fr_out_trial' | 'flow_need_connection' | 'fr_detail_need_anal' | 'fr_csv_need_design'
+export type OutputBlock = 'busy' | 'flow_need_model' | 'fr_out_stale' | 'fr_out_trial' | 'flow_need_connection' | 'fr_detail_need_anal' | 'fr_checks_need_design'
 export const outputState = (): OutputState => ({ built: F.built, analysis: F.analysis, design: F.design, busy: S.busy || !!S.confirm, stale: frameStale(F), connected: !!S.mapiKey.trim() })
 export function outputBlocker(f: OutputState, out?: FrameOutput): OutputBlock | null {
   if (f.busy) return 'busy'

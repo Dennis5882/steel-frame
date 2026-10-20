@@ -242,6 +242,19 @@ for (const lang of ['ko', 'en', 'zh-CN', 'zh-TW'] as const) {
   ok(/s="2"/.test(xml) && /s="1"/.test(xml), 'xlsx: title and header styles')
   const csv = quantityCsv(sheet)
   ok(csv.startsWith('﻿') && csv.includes(t('fr_q_by_story')), 'csv: BOM and storey table')
+  /* 검토 결과 시트 — 부재 전체(응력비 큰 순)·층 검토, 같은 작성기 */
+  const { frameCheckSheet } = await import('../src/frame/checkSheet')
+  const ck = frameCheckSheet(spec, design, review), ckRows = ck.rows
+  const head = ckRows.findIndex((r) => r[0] === '#'), mem = ckRows.slice(head + 1, head + 1 + design.members.length)
+  ok(mem.length === design.members.length && mem.every((r) => r.length === 12), 'checks: one row per member, 12 columns')
+  const key = (r: unknown[]) => Math.max(+(r[9] as string), +(r[10] as string))
+  ok(mem.every((r, i) => i === 0 || key(mem[i - 1]) >= key(r)), 'checks: members sorted by the larger of ratio and detail ratio')
+  ok(ckRows.length === head + 1 + design.members.length + 3 + review.reduce((a, it) => a + it.rows.length, 0), 'checks: storey table has one row per storey item row')
+  const drift = review.find((it) => it.key === 'drift')!
+  ok(ckRows.some((r) => r[3] === `1/${Math.round(1 / drift.rows[0].value)}`), 'checks: drift shown as 1/n like the report')
+  const ckXml = xlsxParts(ck)['xl/worksheets/sheet1.xml'], top = mem[0]
+  ok(ckXml.includes(t('fr_ck_title')) && ckXml.includes(`<v>${top[9]}</v>`) && /s="1"/.test(ckXml) && /s="2"/.test(ckXml), 'checks xlsx: title, ratio as a number cell, title/header styles')
+  ok(quantityCsv(ck).startsWith('﻿') && quantityCsv(ck).includes(t('fr_story_review')), 'checks csv: BOM and storey checks')
 }
 
 /* 8) 상세 계산서 — 캡처 목록, 캡처 실행(가짜 Gen), Gen 그림(PNG data URL)·Gen 표가 Word·PDF 에 들어감 */
@@ -288,7 +301,7 @@ for (const lang of ['ko', 'en', 'zh-CN', 'zh-TW'] as const) {
   const { outputBlocker, frameStale } = await import('../src/frame/state')
   const built = { spec, model, P } as any
   const st = (o: Record<string, unknown>) => ({ built, analysis: null, design: null, busy: false, stale: false, connected: true, ...o }) as any
-  const all = ['report', 'detail', 'drawings', 'quantities', 'csv'] as const
+  const all = ['report', 'detail', 'drawings', 'quantities', 'checks'] as const
   const full = { analysis, design }
   ok(all.every((o) => outputBlocker(st({ ...full, busy: true }), o) === 'busy') && outputBlocker(st({ busy: true })) === 'busy', 'outputs: busy or a confirm dialog blocks the stage and every export')
   ok(all.every((o) => outputBlocker(st({ built: null }), o) === 'flow_need_model'), 'outputs: no model blocks every output')
@@ -297,7 +310,7 @@ for (const lang of ['ko', 'en', 'zh-CN', 'zh-TW'] as const) {
   ok(['report', 'drawings', 'quantities'].every((o) => outputBlocker(st({ connected: false }), o as any) === null) && outputBlocker(st({})) === null, 'outputs: report/drawings/quantities need only the model (no Gen connection)')
   ok(outputBlocker(st({}), 'detail') === 'fr_detail_need_anal' && outputBlocker(st({ analysis }), 'detail') === null, 'outputs: detailed report waits for the analysis')
   ok(outputBlocker(st({ analysis, connected: false }), 'detail') === 'flow_need_connection' && outputBlocker(st({ analysis, connected: false })) === null, 'outputs: detailed report needs the Gen connection (card only, not the stage)')
-  ok(outputBlocker(st({ analysis }), 'csv') === 'fr_csv_need_design' && outputBlocker(st(full), 'csv') === null, 'outputs: check CSV waits for the design checks')
+  ok(outputBlocker(st({ analysis }), 'checks') === 'fr_checks_need_design' && outputBlocker(st(full), 'checks') === null, 'outputs: check results wait for the design checks')
   const reordered = Object.fromEntries(Object.entries(structuredClone(spec)).reverse()) as any
   reordered.sections = Object.fromEntries(Object.entries(spec.sections).reverse())
   ok(!frameStale({ draft: reordered, built }) && frameStale({ draft: { ...spec, heights: spec.heights.map((h, i) => (i ? h : h + 0.3)) }, built }), 'stale: same values in another key order are not a change; a real edit is')
