@@ -91,10 +91,13 @@ function FrameExportCard({ out, disabled }: { out: FrameOut; disabled: boolean }
   const key = `sf_format_${out.id}`
   const [fmt, setFmt] = useState(() => { try { const v = localStorage.getItem(key); return out.formats.find(([f]) => f === v)?.[0] ?? out.formats[0][0] } catch { return out.formats[0][0] } })
   const pick = (f: string) => { setFmt(f); try { localStorage.setItem(key, f) } catch { /* private mode */ } }
-  const off = disabled || (!!out.needDesign && !F.design) || (!!out.needAnalysis && !F.analysis)
+  /* 해석 전 상세 계산서는 막지 않고 이유를 카드에 보인다 (눌러도 같은 안내) — 말없이 비활성이면 왜 안 되는지 모름 */
+  const off = disabled || (!!out.needDesign && !F.design)
+  const why = !disabled && out.needAnalysis && !F.analysis ? t('fr_detail_need_anal') : null
   return <div className="report-export">
     <div className="report-export-head"><out.Icon size={22} /><strong>{t(out.title)}</strong></div>
     <p className="pe-tip">{t(out.hint)}</p>
+    {why && <p className="task-warning" role="status">{why}</p>}
     <div className="report-export-row">
       {out.formats.length > 1 ? <div className="report-formats" role="radiogroup" aria-label={t('out_format')}>{out.formats.map(([f, label]) =>
         <button key={f} type="button" role="radio" aria-checked={fmt === f} className={fmt === f ? 'on' : ''} onClick={() => pick(f)}>{label}</button>)}</div> : <span />}
