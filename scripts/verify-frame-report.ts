@@ -242,19 +242,32 @@ for (const lang of ['ko', 'en', 'zh-CN', 'zh-TW'] as const) {
   ok(/s="2"/.test(xml) && /s="1"/.test(xml), 'xlsx: title and header styles')
   const csv = quantityCsv(sheet)
   ok(csv.startsWith('﻿') && csv.includes(t('fr_q_by_story')), 'csv: BOM and storey table')
-  /* 검토 결과 시트 — 부재 전체(응력비 큰 순)·층 검토, 같은 작성기 */
-  const { frameCheckSheet } = await import('../src/frame/checkSheet')
+  /* 검토 결과 시트 — 부재 전체(응력비 큰 순)·층 검토, 같은 작성기. 숫자 칸·NaN·0 변위 처리 */
+  const { frameCheckSheet, checkOrderKey, checkCounts } = await import('../src/frame/checkSheet')
+  const { storyValue } = await import('../src/frame/report')
   const ck = frameCheckSheet(spec, design, review), ckRows = ck.rows
-  const head = ckRows.findIndex((r) => r[0] === '#'), mem = ckRows.slice(head + 1, head + 1 + design.members.length)
+  const head = ckRows.findIndex((r) => r[0] === t('fr_ck_id')), mem = ckRows.slice(head + 1, head + 1 + design.members.length)
   ok(mem.length === design.members.length && mem.every((r) => r.length === 12), 'checks: one row per member, 12 columns')
   const key = (r: unknown[]) => Math.max(+(r[9] as string), +(r[10] as string))
   ok(mem.every((r, i) => i === 0 || key(mem[i - 1]) >= key(r)), 'checks: members sorted by the larger of ratio and detail ratio')
+  ok(mem.every((r) => /^\d+\.\d{4}$/.test(r[9] as string)), 'checks: ratios keep 4 decimals')
   ok(ckRows.length === head + 1 + design.members.length + 3 + review.reduce((a, it) => a + it.rows.length, 0), 'checks: storey table has one row per storey item row')
-  const drift = review.find((it) => it.key === 'drift')!
-  ok(ckRows.some((r) => r[3] === `1/${Math.round(1 / drift.rows[0].value)}`), 'checks: drift shown as 1/n like the report')
+  const drift = review.find((it) => it.key === 'drift')!, dRow = ckRows.find((r) => r[2] === drift.rows[0].story && r[1] === drift.clause)!
+  ok(+(dRow[3] as string) === +drift.rows[0].value.toFixed(6) && dRow[5] === String(Math.round(1 / drift.rows[0].value)) && !ckRows.some((r) => r.some((c) => /^1\/\d+$/.test(String(c)))), 'checks: drift as a number plus n of 1/n — no "1/45" text Excel would read as a date')
+  const noted = review.flatMap((it) => it.rows).filter((r) => r.note)
+  ok(noted.every((r) => ckRows.some((x) => x[7] === r.note)), `checks: storey notes carried (${noted.length})`)
   const ckXml = xlsxParts(ck)['xl/worksheets/sheet1.xml'], top = mem[0]
   ok(ckXml.includes(t('fr_ck_title')) && ckXml.includes(`<v>${top[9]}</v>`) && /s="1"/.test(ckXml) && /s="2"/.test(ckXml), 'checks xlsx: title, ratio as a number cell, title/header styles')
+  ok(ck.styleOf!(ckRows[0], 0) === 'title' && ck.styleOf!(ckRows[head], head) === 'header' && ck.styleOf!(mem[0], head + 1) === undefined, 'checks: title/header rows marked when built, not found by text')
   ok(quantityCsv(ck).startsWith('﻿') && quantityCsv(ck).includes(t('fr_story_review')), 'checks csv: BOM and storey checks')
+  /* 경계 — 1.0004 는 1.0004 로(등급 NG 와 일치), NaN 응력비는 맨 위, 변위 0·NaN 표기 */
+  const m0 = design.members[0], fake = { ...design, members: [{ ...m0, id: 1, ratio: 0.5, detailRatio: 0.5 }, { ...m0, id: 2, ratio: NaN, detailRatio: 0.2 }, { ...m0, id: 3, ratio: 1.0004, detailRatio: 0.3 }] }
+  const fr = frameCheckSheet(spec, fake as any, null).rows, fh = fr.findIndex((r) => r[0] === t('fr_ck_id'))
+  ok(fr[fh + 1][0] === 2 && fr[fh + 2][0] === 3 && fr[fh + 2][9] === '1.0004' && fr[fh + 2][11] === t('gr_fail') && fr[fh + 1][9] === '', 'checks: NaN ratio first (blank cell), 1.0004 stays above 1 next to its NG grade')
+  ok(checkOrderKey({ ratio: NaN, detailRatio: 1 }) === Infinity && checkCounts(fake as any, null).ng === 1, 'checks: NaN order key and NG count')
+  ok(storyValue(drift, 0) === '0' && storyValue(drift, NaN) === '—' && storyValue(drift, 1 / 250) === '1/250', 'report: drift 0 / NaN no longer print 1/Infinity or 1/NaN')
+  /* 물량 시트도 같은 행 작성기 — 제목·머리 표시 */
+  ok(sheet.styleOf!(sheet.rows[0], 0) === 'title' && sheet.rows.some((r, i) => sheet.styleOf!(r, i) === 'header' && r[0] === t('rp_mark')), 'quantities: rows marked by the shared builder')
 }
 
 /* 8) 상세 계산서 — 캡처 목록, 캡처 실행(가짜 Gen), Gen 그림(PNG data URL)·Gen 표가 Word·PDF 에 들어감 */

@@ -9,6 +9,8 @@ import { buildFrameReport } from '../frame/report'
 import { buildFrameDrawingSvgs, buildFrameDxf, elevationLines } from '../frame/drawings'
 import { frameQuantities } from '../frame/quantities'
 import { frameQuantitySheet } from '../frame/quantitySheet'
+import { checkCounts, frameCheckSheet } from '../frame/checkSheet'
+import type { XlsxSheet } from '../report/xlsx'
 import { quantityCsv } from '../report/quantitySheet'
 import { Cancelled, beginJob, checkCancel, endJob, failMsg, stage } from './job'
 import { mapi } from '../mapi/client'
@@ -125,28 +127,34 @@ export async function downloadFrameDrawingsPdf(): Promise<void> {
   }
 }
 
+/* 시트 산출물 내려받기 (물량·검토 결과 공통) — XLSX 는 작성기를 필요할 때 불러온다. 실패하면 대화창에 이유 */
+async function downloadSheet(base: string, format: 'csv' | 'xlsx', sheet: XlsxSheet): Promise<void> {
+  if (format === 'xlsx') {
+    const { createXlsx } = await import('../report/xlsx')
+    downloadBlob(`${base}_${stamp()}.xlsx`, await createXlsx(sheet))
+  } else downloadBlob(`${base}_${stamp()}.csv`, new Blob([quantityCsv(sheet)], { type: 'text/csv;charset=utf-8' }))
+}
+
 /** 물량 산출서 — CSV(UTF-8 BOM, 엑셀에서 바로 열림) 또는 Excel(.xlsx, 제목·머리 굵게·숫자 칸). 공장 앱과 같은 작성기 */
 export async function downloadFrameQuantities(format: 'csv' | 'xlsx'): Promise<void> {
   if (!outputReady('quantities')) return
-  const q = frameQuantities(F.built!.model), sheet = frameQuantitySheet(F.built!.spec, q)
-  if (format === 'xlsx') {
-    const { createXlsx } = await import('../report/xlsx')
-    downloadBlob(`steel_frame_quantities_${stamp()}.xlsx`, await createXlsx(sheet))
-  } else downloadBlob(`steel_frame_quantities_${stamp()}.csv`, new Blob([quantityCsv(sheet)], { type: 'text/csv;charset=utf-8' }))
-  log(t(format === 'xlsx' ? 'log_xlsx' : 'log_csv'), 'ok')
-  addMsg('bot', lt('fr_qty_done', q.memberT.toFixed(2), q.orderT.toFixed(2)))
+  try {
+    const q = frameQuantities(F.built!.model)
+    await downloadSheet('steel_frame_quantities', format, frameQuantitySheet(F.built!.spec, q))
+    log(t(format === 'xlsx' ? 'log_xlsx' : 'log_csv'), 'ok')
+    addMsg('bot', lt('fr_qty_done', q.memberT.toFixed(2), q.orderT.toFixed(2)))
+  } catch (e) { addMsg('bot', failMsg(e, (m) => t('fr_export_failed', m))) }
 }
 
-/** 검토 결과 — Excel(.xlsx) 또는 CSV. 물량 산출서와 같은 작성기·같은 시트(화면 언어, 부재 검토 + 층 검토) */
+/** 검토 결과 — Excel(.xlsx) 또는 CSV. 물량 산출서와 같은 작성기·같은 시트 작성 방식(화면 언어, 부재 검토 + 층 검토) */
 export async function downloadFrameChecks(format: 'csv' | 'xlsx'): Promise<void> {
   if (!outputReady('checks')) return
-  const { frameCheckSheet } = await import('../frame/checkSheet')
-  const sheet = frameCheckSheet(F.built!.spec, F.design!, F.review)
-  if (format === 'xlsx') {
-    const { createXlsx } = await import('../report/xlsx')
-    downloadBlob(`steel_frame_checks_${stamp()}.xlsx`, await createXlsx(sheet))
-  } else downloadBlob(`steel_frame_checks_${stamp()}.csv`, new Blob([quantityCsv(sheet)], { type: 'text/csv;charset=utf-8' }))
-  log(t('fr_log_checks', format.toUpperCase()), 'ok')
+  try {
+    await downloadSheet('steel_frame_checks', format, frameCheckSheet(F.built!.spec, F.design!, F.review))
+    log(t('fr_log_checks', format.toUpperCase()), 'ok')
+    const c = checkCounts(F.design!, F.review)
+    addMsg('bot', lt('fr_checks_done', c.members, c.ng, c.story))
+  } catch (e) { addMsg('bot', failMsg(e, (m) => t('fr_export_failed', m))) }
 }
 
 const req: Request = (m, p, b) => mapi(m, p, b as Record<string, unknown> | undefined)

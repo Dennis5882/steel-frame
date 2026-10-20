@@ -542,6 +542,7 @@ export const en = {
   g_help_2: 'Release notes',
   g_help_2_cmd: 'release notes',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_3_6_1: 'Check results sheet: ratios keep 4 decimals so values just over 1 match their NG grade, storey drift is a number plus the n of 1/n (Excel no longer turns 1/45 into a date), storey notes are included, and a failed sheet export now says why. Zero or missing drift no longer prints 1/Infinity in the report.',
   rn_v1_3_5_1: 'Check results can be exported as Excel (.xlsx) as well as CSV: every member ratio (largest first) and the storey checks on one sheet, in the screen language, with number cells and the same layout as the quantity take-off.',
   rn_v1_3_4_1: 'Outputs follow one rule everywhere: a stopped optimisation is reported as a leftover trial model instead of "inputs changed", the detailed report checks the Gen connection on its card, exports wait while a confirm dialog is open, and reordering identical inputs no longer counts as a change. The check results CSV now uses the same download, file name and activity log as the other outputs.',
   rn_v1_3_3_1: 'Outputs use one prerequisite check for the stage notice, the cards and every export: after the inputs change, every export asks you to create the model again, and a blocked export always says why in the chat.',

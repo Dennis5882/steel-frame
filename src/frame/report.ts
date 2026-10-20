@@ -50,7 +50,7 @@ export const CHECK_NAME: Record<string, I18nKey> = {
 }
 const checkName = (k: string) => (CHECK_NAME[k] ? L(CHECK_NAME[k]) : esc(k))
 /** 층 검토 값 표기 — 층간변위각은 1/n (계산서·검토 결과 시트 공통) */
-export const storyValue = (it: StoryItem, v: number) => (it.key === 'drift' ? `1/${Math.round(1 / v)}` : f(v, 3))
+export const storyValue = (it: StoryItem, v: number) => (!Number.isFinite(v) ? '—' : it.key === 'drift' ? (v > 0 ? `1/${Math.round(1 / v)}` : '0') : f(v, 3))
 
 /** 등각 3D — 부재 종류 색 또는 응력비 색 (공장 iso 를 그대로: 보 = 'rafter' 색) */
 function frameIso(model: FrameModel, design: FrameDesign | null): string {
