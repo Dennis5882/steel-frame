@@ -283,4 +283,16 @@ for (const lang of ['ko', 'en', 'zh-CN', 'zh-TW'] as const) {
   ok(pdf.getPageCount() > 30, 'detailed PDF renders')
 }
 
+/* 산출물 선행 조건 — 단계 안내·카드·실행 함수가 같이 쓰는 frameOutputBlocker (고정 상태로 검사) */
+{
+  const { frameOutputBlocker } = await import('../src/frame/state')
+  const built = { spec, model, P }, edited = { ...spec, heights: spec.heights.map((h, i) => (i ? h : h + 0.3)) }
+  const st = (o: Record<string, unknown>) => ({ draft: spec, built, analysis: null, design: null, ...o }) as any
+  ok(frameOutputBlocker(st({ built: null })) === 'flow_need_model' && frameOutputBlocker(st({ built: null }), 'design') === 'flow_need_model', 'outputs: no model blocks every output')
+  ok(frameOutputBlocker(st({ draft: edited, analysis, design })) === 'fr_out_stale' && frameOutputBlocker(st({ draft: edited, analysis, design }), 'analysis') === 'fr_out_stale', 'outputs: edited inputs block every output, even with old results')
+  ok(frameOutputBlocker(st({})) === null, 'outputs: report/drawings/quantities need only the model')
+  ok(frameOutputBlocker(st({}), 'analysis') === 'need' && frameOutputBlocker(st({ analysis }), 'analysis') === null, 'outputs: detailed report waits for the analysis')
+  ok(frameOutputBlocker(st({ analysis }), 'design') === 'need' && frameOutputBlocker(st({ analysis, design }), 'design') === null, 'outputs: check CSV waits for the design checks')
+}
+
 console.log(`Frame report/drawings/optimisation: ${checks} checks passed (4 languages PDF + Word, ${elevationLines(spec).length + 2} drawing sheets, OTM, lightest sections)`)

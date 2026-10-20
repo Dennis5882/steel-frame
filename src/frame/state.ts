@@ -95,25 +95,27 @@ export type FrameTask = 'model' | 'analysis' | 'design' | 'optimize' | 'outputs'
 export type FrameTaskStatus = 'todo' | 'ready' | 'done' | 'running' | 'failed' | 'cancelled' | 'stale'
 const JOB_TASK: Record<string, FrameTask> = { build: 'model', restore: 'model', anal: 'analysis', design: 'design', pdf: 'outputs', docx: 'outputs', dwgpdf: 'outputs', opt: 'optimize' }
 
-export function frameBlocker(task: FrameTask): 'busy' | 'flow_need_model' | 'wf_stale_edited' | 'need_anal' | 'flow_need_connection' | 'fr_opt_need_design' | null {
+export function frameBlocker(task: FrameTask): 'busy' | 'flow_need_model' | 'wf_stale_edited' | 'fr_out_stale' | 'need_anal' | 'flow_need_connection' | 'fr_opt_need_design' | null {
   if (S.busy || S.confirm) return 'busy'
   if (task === 'model') return null
+  /* 산출물은 판정을 frameOutputBlocker 하나에 둔다 (단계 안내·카드·실행 함수가 같은 결과) */
+  if (task === 'outputs') { const b = frameOutputBlocker(F); return b === 'need' ? null : b }
   if (!F.built) return 'flow_need_model'
   if (frameStale(F)) return 'wf_stale_edited'
   if (task === 'design' && !F.analysis) return 'need_anal'
-  /* 산출물: 모델만 있어도 계산서·도면을 낸다 (해석·검토 전 부분은 '없음' 표시) */
-  if (task === 'outputs') return null
   if (task === 'optimize' && !(F.design && F.forces)) return 'fr_opt_need_design'
   if (!S.mapiKey.trim()) return 'flow_need_connection'
   return null
 }
 
-/* 산출물별 선행 조건 — 카드 안내와 실행 함수가 같이 쓴다. 'stale' 은 단계 안내(frameBlocker)가 이미 보이지만 실행 함수도 같은 판정을 따른다 */
+/* 산출물 선행 조건 (순수 — 상태를 인자로 받아 verify 에서 고정 상태로 검사한다).
+   모델만 있으면 계산서·도면·물량은 낸다(해석·검토 전 부분은 '없음' 표시). need 가 있으면 그 결과까지 필요. 'need' 의 이유 문구는 산출물마다 다르다 */
 export type FrameOutNeed = 'analysis' | 'design'
-export function frameOutputBlocker(need?: FrameOutNeed): 'stale' | 'need' | null {
-  if (!need) return null
-  if (frameStale(F)) return 'stale'
-  return (need === 'analysis' ? F.analysis : F.design) ? null : 'need'
+export function frameOutputBlocker(f: Pick<FrameState, 'draft' | 'built' | 'analysis' | 'design'>, need?: FrameOutNeed): 'flow_need_model' | 'fr_out_stale' | 'need' | null {
+  if (!f.built) return 'flow_need_model'
+  if (frameStale(f)) return 'fr_out_stale'
+  if (need && !(need === 'analysis' ? f.analysis : f.design)) return 'need'
+  return null
 }
 
 export function frameTaskStatus(task: FrameTask): FrameTaskStatus {

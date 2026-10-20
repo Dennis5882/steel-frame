@@ -542,6 +542,7 @@ export const en = {
   g_help_2: 'Release notes',
   g_help_2_cmd: 'release notes',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_3_3_1: 'Outputs use one prerequisite check for the stage notice, the cards and every export: after the inputs change, every export asks you to create the model again, and a blocked export always says why in the chat.',
   rn_v1_3_2_1: 'Output cards say why they are not available yet: the detailed report needs the analysis and the check results CSV needs the design checks; the card and the export use the same prerequisite check.',
   rn_v1_3_1_1: 'The detailed report card explains that the analysis must be run first instead of staying silently disabled. Verified end-to-end in Edge: model, analysis, design checks and the detailed Word report with 11 Gen NX captures.',
   rn_v1_3_0_1: 'Detailed calculation report (Word): Gen NX captures the model, floor plan, frame elevations, reactions, displacement contour, moment and axial diagrams and stresses into the save folder on this PC, and the report includes them with the Gen storey tables. Allow the app to read the save folder once (Chrome or Edge).',

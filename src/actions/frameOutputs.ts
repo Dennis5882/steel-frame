@@ -1,6 +1,6 @@
 /* 다층 강골조 산출물 — 계산서(HTML 새 창 / PDF / Word)·도면(DXF / A3 PDF). 공장 앱 변환기(report/pdf.ts·docx.ts)를 그대로 쓴다.
    모두 브라우저 안에서 만들고 서버로 보내지 않는다. 해석·검토 전이면 있는 부분까지만 싣는다(계산서에 '없음' 표시). */
-import { getLang, t, lt } from '../i18n'
+import { getLang, t, lt, type I18nKey } from '../i18n'
 import { S } from '../state/store'
 import { addMsg, log, recordArtifact } from '../state/ui'
 import { APP_VERSION } from '../version'
@@ -12,7 +12,7 @@ import { frameQuantitySheet } from '../frame/quantitySheet'
 import { quantityCsv } from '../report/quantitySheet'
 import { Cancelled, beginJob, checkCancel, endJob, failMsg, stage } from './job'
 import { mapi } from '../mapi/client'
-import { frameOutputBlocker } from '../frame/state'
+import { frameOutputBlocker, type FrameOutNeed } from '../frame/state'
 import { captureShots } from '../frame/captures'
 import { captureGen } from '../frame/run'
 import type { Request } from '../frame/results'
@@ -34,9 +34,18 @@ function downloadBlob(name: string, blob: Blob): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
-function ready(): boolean {
+/* 결과가 있어야 내는 산출물 — 선행 조건과 이유 문구. 카드(FrameWorkspace)와 실행 함수가 같이 쓴다 */
+export type OutputNeed = { need: FrameOutNeed; hint: I18nKey }
+export const OUTPUT_NEED = {
+  detail: { need: 'analysis', hint: 'fr_detail_need_anal' },
+  csv: { need: 'design', hint: 'fr_csv_need_design' },
+} as const satisfies Record<string, OutputNeed>
+
+/** 실행 전 판정 — 단계 안내·카드와 같은 frameOutputBlocker. 막히면 이유를 대화창에 남긴다 */
+export function outputReady(n?: OutputNeed): boolean {
   if (S.busy) { addMsg('bot', lt('busy')); return false }
-  if (!F.built) { addMsg('bot', lt('no_model')); return false }
+  const b = frameOutputBlocker(F, n?.need)
+  if (b) { addMsg('bot', lt(b === 'need' ? n!.hint : b), 'warn'); return false }
   return true
 }
 
@@ -45,7 +54,7 @@ const drawingInput = () => ({ spec: F.built!.spec, model: F.built!.model, title:
 const partial = (): 'fr_report_done' | 'fr_report_partial' => (F.design ? 'fr_report_done' : 'fr_report_partial')
 
 export function openFrameReport(): void {
-  if (!ready()) return
+  if (!outputReady()) return
   const html = reportHtml()
   const name = `steel_frame_report_${getLang()}_${stamp()}.html`
   const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
@@ -58,7 +67,7 @@ export function openFrameReport(): void {
 }
 
 export async function downloadFrameReportPdf(): Promise<void> {
-  if (!ready() || !beginJob('pdf')) return
+  if (!outputReady() || !beginJob('pdf')) return
   try {
     stage('pdf_start')
     const name = `steel_frame_report_${getLang()}_${stamp()}.pdf`
@@ -78,7 +87,7 @@ export async function downloadFrameReportPdf(): Promise<void> {
 }
 
 export async function downloadFrameReportDocx(): Promise<void> {
-  if (!ready() || !beginJob('docx')) return
+  if (!outputReady() || !beginJob('docx')) return
   try {
     stage('docx_start')
     const name = `steel_frame_report_${getLang()}_${stamp()}.docx`
@@ -98,7 +107,7 @@ export async function downloadFrameReportDocx(): Promise<void> {
 }
 
 export function downloadFrameDxf(): void {
-  if (!ready()) return
+  if (!outputReady()) return
   const name = `steel_frame_drawings_${stamp()}.dxf`
   downloadBlob(name, new Blob([buildFrameDxf(drawingInput())], { type: 'application/dxf' }))
   log(t('log_dxf'), 'ok')
@@ -106,7 +115,7 @@ export function downloadFrameDxf(): void {
 }
 
 export async function downloadFrameDrawingsPdf(): Promise<void> {
-  if (!ready() || !beginJob('dwgpdf')) return
+  if (!outputReady() || !beginJob('dwgpdf')) return
   try {
     stage('dwg_pdf_start')
     const name = `steel_frame_drawings_${stamp()}.pdf`
@@ -126,7 +135,7 @@ export async function downloadFrameDrawingsPdf(): Promise<void> {
 
 /** 물량 산출서 — CSV(UTF-8 BOM, 엑셀에서 바로 열림) 또는 Excel(.xlsx, 제목·머리 굵게·숫자 칸). 공장 앱과 같은 작성기 */
 export async function downloadFrameQuantities(format: 'csv' | 'xlsx'): Promise<void> {
-  if (!ready()) return
+  if (!outputReady()) return
   const q = frameQuantities(F.built!.model), sheet = frameQuantitySheet(F.built!.spec, q)
   if (format === 'xlsx') {
     const { createXlsx } = await import('../report/xlsx')
@@ -143,9 +152,7 @@ const genDir = () => S.saveDir.trim().replace(/\\/g, '/').replace(/\/+$/, '') ||
     캡처 PNG 는 Gen 이 같은 PC 의 저장 폴더에 쓰고, 앱은 사용자가 고른 그 폴더에서 읽는다(File System Access, Chrome·Edge).
     폴더 고르기는 클릭 직후(사용자 동작 안)에 먼저 한다. Gen 문서가 이 모델이 아니면(절점 수 다름) 캡처하지 않는다 */
 export async function downloadFrameDetailedDocx(): Promise<void> {
-  if (!ready()) return
-  const block = frameOutputBlocker('analysis') // 카드 안내와 같은 판정
-  if (block) { addMsg('bot', lt(block === 'stale' ? 'wf_stale_edited' : 'fr_detail_need_anal'), 'warn'); return }
+  if (!outputReady(OUTPUT_NEED.detail)) return
   if (!folderAccessSupported()) { addMsg('bot', lt('fr_detail_no_fs'), 'warn'); return }
   let dir
   try { dir = await pickGenFolder() } catch { return } // 사용자가 폴더 선택을 취소
