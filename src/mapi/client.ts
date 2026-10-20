@@ -5,8 +5,11 @@ import { S } from '../state/store'
 import { log } from '../state/ui'
 import { jobCall } from '../actions/job'
 
-/* 해석 등은 수 분 걸릴 수 있다 — SDK 기본 30s 대신 넉넉히 (대기만 중단, Gen 작업은 취소되지 않음) */
-const TIMEOUT_MS = 15 * 60 * 1000
+/* 대기 한도 (대기만 중단, Gen 작업은 취소되지 않음). Gen 모달 대화상자가 뜨면 모든 호출이 응답하지 않으므로
+   기본은 짧게 두고 수 분 걸리는 해석만 길게 준다 (midas-nx 2.10.2 README). */
+const TIMEOUT_MS = 3 * 60 * 1000
+const LONG_TIMEOUT_MS = 15 * 60 * 1000
+const LONG_CALLS = new Set(['/doc/anal'])
 
 let cached: { key: string; base: string; client: MidasClient } | null = null
 
@@ -34,7 +37,8 @@ export async function mapi<T = any>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', p
   jobCall(`${method} ${ep}`) // 취소됐으면 여기서 Cancelled — 보내기 전에 멈춘다
   log(`<span style="color:var(--blue)">${method}</span> ${ep}${note ? ` <span style="color:var(--dim)">· ${note}</span>` : ''}`, 'api')
   try {
-    return (await getClient().request(method, ep, body as JsonObject | undefined)) as T
+    const opts = LONG_CALLS.has(ep.toLowerCase()) ? { timeout: LONG_TIMEOUT_MS } : undefined
+    return (await getClient().request(method, ep, body as JsonObject | undefined, opts)) as T
   } catch (e) {
     const m = apiErrorMessage(e)
     log(`${method} ${ep} — ${m}`, 'err')

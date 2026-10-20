@@ -19,6 +19,8 @@ export function expectOk(r: any, what: string): void {
 
 const DB_ORDER = ['UNIT', 'MATL', 'SECT', 'NODE', 'ELEM', 'CONS', 'STLD', 'BODF', 'FBLD', 'FBLA', 'BMLD', 'CNLD', 'STOR'] as const
 const DB_AFTER_STOR = ['STYP', 'LTOM', 'EIGV', 'SPFC', 'SPLC', 'LCOM-GEN'] as const
+/** EIGENVALUEMODE 매뉴얼 예제의 COMPONENTS (midas-nx 2.10.2 기본값과 같음) */
+const EIGEN_COMPONENTS = ['Node', 'Mode', 'UX', 'UY', 'UZ', 'RX', 'RY', 'RZ']
 /** 전송 호출 수 (진행 막대) — new + DB + ope/STOR + 읽기 5 */
 export const SEND_CALLS = 1 + DB_ORDER.length + 1 + DB_AFTER_STOR.length + 5
 
@@ -99,10 +101,10 @@ export async function collectAnalysis(req: Request, spec: FrameSpec, model: Fram
   for (const [key, lc] of [['otmX', 'RX(RS)'], ['otmY', 'RY(RS)']] as const) {
     try { story[key] = await table(req, 'OVERTURNING_MOMENT', { loads: [lc] }) } catch (e: any) { missing[key] = e?.message ?? String(e); log(`OVERTURNING_MOMENT ${lc}: ${missing[key]}`) }
   }
-  /* 주기·참여질량 — EIGENVALUEMODE 는 간헐적으로 Unknown Error (gen-api-cautions.md 4) → 한 번 재시도 */
+  /* 주기·참여질량 — EIGENVALUEMODE 는 COMPONENTS 가 없으면 Unknown Error (gen-api-cautions.md 4, midas-nx 2.10.2) → 매뉴얼 목록을 넣고 한 번 재시도 */
   let eigen: StoryTables['eigen'] = null
   for (let i = 0; i < 2 && !eigen; i++) {
-    try { eigen = parseEigen((await req('POST', '/post/TABLE', { Argument: { TABLE_NAME: 'EV', TABLE_TYPE: 'EIGENVALUEMODE', UNIT: { FORCE: 'KN', DIST: 'M' } } }))?.EV) }
+    try { eigen = parseEigen((await req('POST', '/post/TABLE', { Argument: { TABLE_NAME: 'EV', TABLE_TYPE: 'EIGENVALUEMODE', UNIT: { FORCE: 'KN', DIST: 'M' }, COMPONENTS: EIGEN_COMPONENTS } }))?.EV) }
     catch (e: any) { missing.eigen = e?.message ?? String(e); log(`EIGENVALUEMODE try ${i + 1}: ${missing.eigen}`) }
   }
   if (eigen) delete missing.eigen

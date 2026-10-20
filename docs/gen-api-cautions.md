@@ -59,7 +59,13 @@ DELETE /db/MATL/9                            → 재료 9만 삭제
   - `codes/cnReview.ts:26`
   - `codes/krReview.ts:35`
   - `codes/twReview.ts:31`
-- **조치**: 실패하면 한 번 재시도하고(`scripts/live-frame.ts`), 그래도 실패하면 주기·유효질량을 '확인 불가'로 표시한다. 재현 조건을 찾으면 MIDAS에 보고한다.
+- **원인(2026-10-20, midas-nx 2.10.2)**: `COMPONENTS`가 없으면 매번 `Unknown Error`, 있으면 매번 응답한다. 위의 "간헐적"은 이 차이로 보인다.
+- **조치**: 매뉴얼 예제 목록 `COMPONENTS: ["Node","Mode","UX","UY","UZ","RX","RY","RZ"]`를 넣는다(`src/frame/run.ts`). 응답의 `SUB_TABLES`(주기·참여질량)는 그대로 온다(라이브 2026-10-20: T1 1.0456 s, 참여질량 X·Y 100%). 재시도 1회와 실패 시 '확인 불가' 표시는 안전장치로 남긴다. story 앱의 같은 호출에도 넣어야 한다.
+
+## 4-1. midas-nx 2.10.2 (2026-10-20)
+
+- `request()`가 id 없는 `DELETE /db/<NAME>`을 `{ confirm: true }` 없이는 막는다(`DestructiveOperationError`). 앱 `src`에는 그런 호출이 없다. 옛 `scripts/gate/live-gate2~4.ts`의 Assign 본문 DELETE는 이제 실행되지 않는다(의도된 차단).
+- 대기 한도: Gen 모달 대화상자가 뜨면 모든 호출이 응답하지 않는다. 앱(`src/mapi/client.ts`)과 `scripts/live-frame.ts`는 기본 3분, `/doc/anal`만 15분으로 둔다. 공장 앱의 같은 모듈(15분 한 개)에도 반영이 필요하다.
 
 ## 5. 재료 `GB50017-17(S)`
 

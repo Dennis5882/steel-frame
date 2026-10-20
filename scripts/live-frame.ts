@@ -16,8 +16,9 @@ import { analyze, collectAnalysis, collectForces, expectOk, fitView, runRound, s
 import { optIter, optSummary, optimizeLoop, sectionsKey, type FrameSections } from '../src/frame/optimize'
 import type { FrameSpec } from '../src/frame/types'
 
-const client = new MidasClient({ mapiKey: await readMapiKey(), product: 'gen', timeout: 15 * 60 * 1000 })
-const req: Request = (m, p, b) => client.request(m, p, b as any) as Promise<any>
+/* 화면(src/mapi/client.ts)과 같은 대기 한도 — 기본 3분, 해석만 15분 */
+const client = new MidasClient({ mapiKey: await readMapiKey(), product: 'gen', timeout: 3 * 60 * 1000 })
+const req: Request = (m, p, b) => client.request(m, p, b as any, p.toLowerCase() === '/doc/anal' ? { timeout: 15 * 60 * 1000 } : undefined) as Promise<any>
 const stamp = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '_')
 const log = (...a: unknown[]) => console.log(...a)
 const evidence: Record<string, unknown> = { stamp }
