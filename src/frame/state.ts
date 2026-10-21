@@ -17,6 +17,17 @@ export const REVIEW_STEP = FRAME_STEPS.length - 1
 /** trial = 최적화가 중단돼 Gen 에 남은 시험 모델 (입력은 최적화 전 단면으로 되돌려 둠). 모델을 다시 만들면 새 FrameBuilt 라 사라진다 */
 export interface FrameBuilt { spec: FrameSpec; model: FrameModel; P: FramePayloads; counts: SendCounts; file: string; trial?: boolean }
 
+/** DXF 에서 가져온 축망 (화면 상태, 스펙에는 넣지 않음) — 밑그림 선(스펙 좌표 m), 스팬 출처(치수·도면·불일치),
+    가져온 직후 값(되돌리기용). locked = 스팬 편집 잠금 (DXF 값 그대로) */
+export interface FrameCad {
+  file: string
+  lines: [number, number, number, number][]
+  srcX: ('dim' | 'geom' | 'conflict')[]; srcY: ('dim' | 'geom' | 'conflict')[]
+  dimX: (number | null)[]; dimY: (number | null)[]
+  snapshot: Pick<FrameSpec, 'xs' | 'ys' | 'removed' | 'axisLabels'>
+  locked: boolean
+}
+
 export function freshFrameState() {
   return {
     draft: null as FrameSpec | null,
@@ -33,6 +44,9 @@ export function freshFrameState() {
     opt: null as FrameOptSummary | null,
     /** 3D 를 응력비 색으로 */
     ratioView: false,
+    /** 시작 방식 — 'dxf' 면 축망 단계가 DXF 가져오기부터 */
+    start: 'manual' as 'manual' | 'dxf',
+    cad: null as FrameCad | null,
   }
 }
 export const F = freshFrameState()
@@ -40,9 +54,11 @@ export type FrameState = typeof F
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 
-export function startTemplate(key: FrameTemplateKey): void {
+export function startTemplate(key: FrameTemplateKey, start: 'manual' | 'dxf' = 'manual'): void {
   F.draft = clone(FRAME_TEMPLATES[key].spec)
   F.tpl = key
+  F.start = start
+  F.cad = null
   F.view = 'edit'
   F.step = 0
   F.visited = 0
@@ -152,3 +168,20 @@ export function frameTaskStatus(task: FrameTask): FrameTaskStatus {
   const b = frameBlocker(task)
   return b && b !== 'flow_need_connection' ? 'todo' : 'ready'
 }
+
+/** DXF 축망 적용 — 스펙(xs·ys·패널·축 번호, 가새·삼각 비움)과 밑그림·스팬 출처. 스팬은 잠근 상태로 시작 */
+export function setCadGrid(next: Pick<FrameSpec, 'xs' | 'ys' | 'removed' | 'axisLabels'>, info: Omit<FrameCad, 'snapshot' | 'locked'>): void {
+  editDraft((s) => { s.xs = next.xs; s.ys = next.ys; s.removed = next.removed; s.cuts = []; s.braces = []; s.axisLabels = next.axisLabels })
+  F.cad = { ...info, snapshot: clone(next), locked: true }
+  F.start = 'dxf'
+  notify()
+}
+/** 잠금 풀기(직접 수정) / 다시 잠그기(DXF 값으로 되돌림) */
+export function setCadLocked(locked: boolean): void {
+  if (!F.cad) return
+  if (locked) { const n = F.cad.snapshot; editDraft((s) => { s.xs = clone(n.xs); s.ys = clone(n.ys); s.removed = clone(n.removed); s.cuts = []; s.braces = []; s.axisLabels = n.axisLabels && clone(n.axisLabels) }) }
+  F.cad.locked = locked
+  notify()
+}
+/** DXF 로 시작했지만 직접 그리기로 */
+export function setStartManual(): void { F.start = 'manual'; notify() }

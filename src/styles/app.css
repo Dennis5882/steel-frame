@@ -943,6 +943,10 @@ td.pos{color:var(--green)} td.neg{color:var(--red)}
 .cad-ax.part line.cad-hit:hover,.cad-ax.picked line.cad-hit:hover{stroke:color-mix(in srgb,var(--blue) 25%,transparent)}
 .cad-off{fill:color-mix(in srgb,var(--red) 18%,transparent);stroke:none}
 .cad-col{fill:var(--txt-2);opacity:.75}
+.fr-underlay line{stroke:var(--muted);stroke-width:.6;opacity:.45;pointer-events:none}
+.fr-dim.src-geom{fill:var(--amber,var(--muted))}.fr-dim.src-conflict{fill:var(--red);font-weight:700}
+.cad-source{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:.76rem;margin:4px 0 8px}.cad-source b{font-family:var(--font-mono)}
+.cad-start{border:1px solid var(--cyan);border-radius:10px;padding:12px 14px;background:var(--bg)}
 .cad-help{margin-top:8px;font-size:.72rem;color:var(--txt-2)}.cad-help summary{cursor:pointer;color:var(--cyan)}.cad-help ul{margin:6px 0 0 16px;line-height:1.7}
 
 .fr-new{margin-top:6px}.fr-new strong{font-size:1rem}.fr-example{margin-top:10px;align-self:flex-start;display:inline-flex;gap:6px;align-items:center}

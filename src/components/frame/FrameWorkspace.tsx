@@ -1,6 +1,6 @@
 /* 다층 강골조 작업 영역 — 左 작업 흐름(FrameTaskNav) + 가운데: 모델링(시작·8단계) / 해석 / 설계 검토 / 최적화 / 출력.
    공장 Workspace·TaskNav·TaskStage 와 같은 레이아웃·CSS, 상태는 src/frame/state.ts */
-import { ArrowRight, BookOpen, Camera, Building2, Plus, Calculator, ChevronLeft, CircleHelp, ClipboardCheck, Download, Eraser, FileText, FolderOpen, History, Play, RotateCcw, Ruler, Settings, SlidersHorizontal, Table2 } from 'lucide-react'
+import { ArrowRight, BookOpen, Camera, Building2, Plus, Calculator, ChevronLeft, CircleHelp, ClipboardCheck, Download, Eraser, FileText, FolderOpen, History, Play, RotateCcw, Ruler, Settings, SlidersHorizontal, Table2, FileUp } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { t, type I18nKey } from '../../i18n'
 import { S, notify, useStore } from '../../state/store'
@@ -174,9 +174,9 @@ export function FrameWorkspace({ guideCollapsed, onOpenGuide, onOpenMapi }: { gu
   }, [editing, id])
   const home = () => { F.view = 'start'; S.viewNonce++; notify() }
   /* 새로 시작 — 편집 중인 입력이 있으면 바꾸기 전에 확인 */
-  const start = async (k: FrameTemplateKey) => {
+  const start = async (k: FrameTemplateKey, how: 'manual' | 'dxf' = 'manual') => {
     if (F.draft && !await confirmAction({ title: t('fr_replace_title'), body: t('fr_replace_body'), ok: t('fr_replace_ok') })) return
-    startTemplate(k)
+    startTemplate(k, how)
   }
   const resume = () => { F.view = 'edit'; S.task = 'model'; S.panel = 'viewP'; S.viewNonce++; notify() }
   return <section ref={root} className={`workspace${guideCollapsed ? ' g-closed' : ''}`} aria-label={t('ws_title')}>
@@ -192,6 +192,7 @@ export function FrameWorkspace({ guideCollapsed, onOpenGuide, onOpenMapi }: { gu
       <div className="ws-hero"><h2 tabIndex={-1}>{t('fr_start_title')}</h2><p>{t('fr_start_hint')}</p></div>
       <section className="project-code"><h3 className="ws-section-label">{t('code_label')}</h3><p><strong>{t('fr_code_label')}</strong></p><p className="pe-tip">{t('fr_code_note')}</p></section>
       {F.draft && <button className="ws-resume-card" disabled={s.busy} onClick={resume}><FolderOpen size={20} /><span><strong>{t('ws_resume')}</strong><small>{t('ws_resume_hint')}</small></span><ArrowRight size={16} /></button>}
+      <button className="ws-free fr-new" disabled={s.busy} onClick={() => void start('blank', 'dxf')}><FileUp size={22} /><span><strong>{t('fr_start_dxf')}</strong><small>{t('fr_start_dxf_hint')}</small></span><ArrowRight size={16} /></button>
       <button className="ws-free fr-new" disabled={s.busy} onClick={() => void start('blank')}><Plus size={22} /><span><strong>{t('fr_new')}</strong><small>{t('fr_new_hint')}</small></span><ArrowRight size={16} /></button>
       <button className="btn btn-ghost fr-example" disabled={s.busy} onClick={() => void start('tutorial')}><BookOpen size={14} />{t('fr_example')}</button>
       <p className="ws-start-note">{t('fr_example_hint')}</p>

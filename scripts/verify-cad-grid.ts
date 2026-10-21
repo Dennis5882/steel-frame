@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { readDxf } from '../src/frame/cad/dxfRead'
-import { applyAxisGrid, autoLabel, axisRegions, extractAxisGrid, extractColumns, extractWalls, regionPad, suggestShape } from '../src/frame/cad/axisGrid'
+import { applyAxisGrid, autoLabel, axisRegions, extractAxisGrid, extractColumns, extractWalls, regionPad, snapGrid, suggestShape, underlayLines } from '../src/frame/cad/axisGrid'
 import { axisLabel, axisLabels, deleteSpan, insertSpan, parseLabels, setAxisLabels, setGrid } from '../src/frame/plan'
 import { buildFrameDrawingSvgs } from '../src/frame/drawings'
 import { TUTORIAL_SPEC } from '../src/frame/tutorial'
@@ -18,14 +18,24 @@ const same = (a: number[], b: number[], m: string) => { assert.deepEqual(a, b, `
 
 /* 최소 R12 DXF 작성 (문자열 → 바이트, 레이어 이름은 bytes 로 직접 넣을 수 있게) */
 type E = ['LINE', string, number, number, number, number] | ['CIRCLE', string, number, number, number] | ['TEXT', string, number, number, number, string]
-function dxf(ents: E[], header: [string, number, string | number][] = []): string {
+  | ['DIM', string, string, number, number, number, number]
+function dxf(ents: E[], header: [string, number, string | number][] = [], blocks: [string, string][] = []): string {
   const g = (c: number | string, v: unknown) => `${c}\n${v}\n`
   let s = g(0, 'SECTION') + g(2, 'HEADER')
   for (const [k, code, v] of header) s += g(9, k) + g(code, v)
-  s += g(0, 'ENDSEC') + g(0, 'SECTION') + g(2, 'ENTITIES')
+  s += g(0, 'ENDSEC')
+  if (blocks.length) {
+    /* 치수 블록 *D… — 표시 글자(MTEXT) 하나 */
+    s += g(0, 'SECTION') + g(2, 'BLOCKS')
+    for (const [name, text] of blocks) s += g(0, 'BLOCK') + g(8, '0') + g(2, name) + g(70, 1) + g(10, 0) + g(20, 0) + g(30, 0) + g(3, name)
+      + g(0, 'MTEXT') + g(8, 'DIM') + g(10, 0) + g(20, 0) + g(30, 0) + g(40, 300) + g(1, text) + g(0, 'ENDBLK') + g(8, '0')
+    s += g(0, 'ENDSEC')
+  }
+  s += g(0, 'SECTION') + g(2, 'ENTITIES')
   for (const e of ents) {
     if (e[0] === 'LINE') s += g(0, 'LINE') + g(8, e[1]) + g(10, e[2]) + g(20, e[3]) + g(30, 0) + g(11, e[4]) + g(21, e[5]) + g(31, 0)
     else if (e[0] === 'CIRCLE') s += g(0, 'CIRCLE') + g(8, e[1]) + g(10, e[2]) + g(20, e[3]) + g(30, 0) + g(40, e[4])
+    else if (e[0] === 'DIM') s += g(0, 'DIMENSION') + g(8, e[1]) + g(2, e[2]) + g(10, e[5]) + g(20, e[4] - 2000) + g(30, 0) + g(11, (e[3] + e[5]) / 2) + g(21, e[4] - 2000) + g(31, 0) + g(70, 0) + g(13, e[3]) + g(23, e[4]) + g(33, 0) + g(14, e[5]) + g(24, e[6]) + g(34, 0)
     else s += g(0, 'TEXT') + g(8, e[1]) + g(10, e[2]) + g(20, e[3]) + g(30, 0) + g(40, e[4]) + g(1, e[5])
   }
   return s + g(0, 'ENDSEC') + g(0, 'EOF')
@@ -178,6 +188,33 @@ ok(autoLabel('Y', 13) === 'P' && autoLabel('X', 0) === '1', 'auto labels skip O;
   ok(sheets[0].svg.includes('>GA<') && sheets.some((x) => /ELEVATION GRID G/.test(x.name)), 'labels: drawings use the axis numbers')
 }
 
+/* 11) 치수 우선 스팬 — 선이 8399.6 mm 로 조금 어긋나게 그려진 도면 */
+{
+  const AX = [0, 8399.6, 16800], AY = [0, 6000]
+  const base = grid(AX, AY)
+  const read = (more: E[], blocks: [string, string][] = []) => { const d = readDxf(bytes(dxf([...base, ...more], [['$INSUNITS', 70, 4]], blocks))); const g = extractAxisGrid(d); return { g, sg: snapGrid(g), d } }
+  const geo = read([]).sg
+  same(geo.xs, [0, 8.4, 16.8], 'dims: none -> line positions (1 mm)')
+  ok(geo.srcX.every((k) => k === 'geom'), 'dims: none -> span source = drawing')
+  const t = read([['TEXT', 'DIM', 4100, -2500, 300, '8400'], ['TEXT', 'DIM', 12500, -2500, 300, '8400'], ['TEXT', 'DIM', -2500, 2900, 300, '6000']]).sg
+  ok(t.srcX.join() === 'dim,dim' && t.srcY.join() === 'dim', `dims: exploded dimension texts are used (${t.srcX}, ${t.srcY})`)
+  const off = read([], []).sg
+  ok(off.xs[1] === 8.4, 'dims: rounding keeps 8.4 here (8399.6 -> 8400 mm)')
+  const AX2 = [0, 8397.3, 16800]
+  const d2 = readDxf(bytes(dxf([...grid(AX2, AY), ['TEXT', 'DIM', 4100, -2500, 300, '8400']], [['$INSUNITS', 70, 4]])))
+  const s2 = snapGrid(extractAxisGrid(d2))
+  same(s2.xs, [0, 8.4, 16.803], 'dims: 8397.3 drawn, dimension 8400 -> 8.4; next span has no dimension -> 8402.7 rounded')
+  ok(s2.srcX.join() === 'dim,geom', 'dims: per-span source')
+  const dm = read([['DIM', 'DIM', '*D1', 0, 0, 8399.6, 0], ['DIM', 'DIM', '*D2', 8399.6, 0, 16800, 0]], [['*D1', '8400'], ['*D2', '\\A1;8400']])
+  ok(dm.sg.srcX.join() === 'dim,dim' && dm.g.dims.length === 2, `dims: DIMENSION value read from its block (${dm.sg.srcX}, ${dm.g.dims.length})`)
+  const cf = read([['DIM', 'DIM', '*D1', 0, 0, 8399.6, 0]], [['*D1', '9000']]).sg
+  ok(cf.srcX[0] === 'conflict' && cf.dimX[0] === 9000 && cf.xs[1] === 8.4, 'dims: a dimension that disagrees (9000 vs 8400) -> drawing kept, flagged')
+  const sp = applyAxisGrid(TUTORIAL_SPEC, read([['TEXT', 'DIM', 4100, -2500, 300, '8400'], ['TEXT', 'DIM', 12500, -2500, 300, '8400']]).g)
+  same(sp.xs, [0, 8.4, 16.8], 'apply: uses the dimension-first spans')
+  const ul = underlayLines(dm.d, dm.g, dm.sg.origin, ['DOTE'])
+  ok(ul.length === 5 && ul.some(([x1, , x2]) => x1 === 0 && x2 === 0), 'underlay: axis-layer lines in spec coordinates (first grid line = 0)')
+}
+
 /* 8) 로컬 샘플 (있을 때만) */
 const SAMPLE = 'samples/cad/zg test2.dxf'
 if (existsSync(SAMPLE)) {
@@ -185,6 +222,9 @@ if (existsSync(SAMPLE)) {
   same(g.layers, ['AXIS'], 'zg test2: AXIS (AXIS_NUM, AXIS_DIM left out)')
   same(g.xs, [0, 8.4, 16.8, 25.2, 33.6], 'zg test2: X main axes'); same(g.ys, [0, 8.4, 18.65, 27.05], 'zg test2: Y main axes')
   ok(g.axes.filter((a) => !a.main).length === 5 && g.warnings.includes('labels_auto') && g.scale?.factor === 1, 'zg test2: 5 partial axes, exploded bubbles → auto numbers, scale 1')
+  const sg = snapGrid(g)
+  console.log(`  zg test2 span sources X ${sg.srcX} · Y ${sg.srcY}`)
+  ok(sg.srcX.every((k) => k !== 'conflict') && sg.srcY.every((k) => k !== 'conflict'), 'zg test2: no dimension conflicts')
 } else console.log(`(skip ${SAMPLE}: local sample not present)`)
 
 console.log(`CAD axis grid import: ${checks} checks passed`)

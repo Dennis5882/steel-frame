@@ -5,7 +5,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { FileUp, X } from 'lucide-react'
 import { t } from '../../i18n'
-import { F, editDraft } from '../../frame/state'
+import { F, setCadGrid, setStartManual } from '../../frame/state'
 import { confirmAction } from '../ConfirmDialog'
 import type { AxisLine, AxisRegion, CadDrawing, ColumnShape, GridImport, GridWarning, ShapeSuggestion } from '../../frame/cad'
 
@@ -58,7 +58,8 @@ function AxisPreview({ g, picked, onToggle, cols, shape, extra }: { g: GridImpor
   </svg>
 }
 
-export function CadImport({ off }: { off: boolean }) {
+/** variant: 'start' = DXF 로 시작한 축망 단계 첫 화면(크게, 직접 그리기 전환), 'section' = 축망 단계 아래 '다른 DXF 열기' */
+export function CadImport({ off, variant = 'section' }: { off: boolean; variant?: 'start' | 'section' }) {
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ kind: 'err' | 'ok'; text: string } | null>(null)
@@ -100,6 +101,8 @@ export function CadImport({ off }: { off: boolean }) {
   const suggestion = g && L ? L.mod.suggestShape(g, extra, cols, walls) : null
   const shape = useShape ? suggestion : null
   const result = g && F.draft ? L!.mod.applyAxisGrid(F.draft, g, extra, shape) : null
+  const snapped = g && L ? L.mod.snapGrid(g, extra) : null
+  const srcAll = snapped ? [...snapped.srcX, ...snapped.srcY] : []
   const nx = result ? result.xs.length - 1 : 0, ny = result ? result.ys.length - 1 : 0
   const canApply = !!result && nx >= 1 && ny >= 1 && nx <= MAX_SPANS && ny <= MAX_SPANS
   const lineLayers = L ? L.d.layers.filter((l) => l.lines > 0).slice(0, 16) : []
@@ -107,18 +110,23 @@ export function CadImport({ off }: { off: boolean }) {
 
   const toggle = (a: AxisLine) => setPicked((p) => { const n = new Set(p); const k = keyOf(a); if (n.has(k)) n.delete(k); else n.add(k); return n })
   async function apply() {
-    if (!g || !L || !canApply) return
-    if (!await confirmAction({ title: t('cad_apply'), body: t('cad_apply_note'), ok: t('cad_apply') })) return
-    editDraft((s) => { const n = L.mod.applyAxisGrid(s, g, extra, shape); s.xs = n.xs; s.ys = n.ys; s.removed = n.removed; s.cuts = n.cuts; s.braces = n.braces; s.axisLabels = n.axisLabels })
+    if (!g || !L || !canApply || !F.draft) return
+    /* DXF 로 막 시작한 경우(바꿀 입력이 없음)는 묻지 않는다 */
+    if (!(variant === 'start' && !F.cad) && !await confirmAction({ title: t('cad_apply'), body: t('cad_apply_note'), ok: t('cad_apply') })) return
+    const n = L.mod.applyAxisGrid(F.draft, g, extra, shape)
+    const lines = L.mod.underlayLines(L.d, g, snapped!.origin, [...new Set([...use, ...colUse, ...L.mod.wallLayers(L.d)])])
+    setCadGrid({ xs: n.xs, ys: n.ys, removed: n.removed, axisLabels: n.axisLabels }, { file: L.name, lines, srcX: snapped!.srcX, srcY: snapped!.srcY, dimX: snapped!.dimX, dimY: snapped!.dimY })
     setMsg({ kind: 'ok', text: t('cad_applied', nx, ny) })
     setL(null)
   }
 
-  return <section className="mw-group cad-import"><h4>{t('cad_import')}</h4>
+  const head = variant === 'start' ? 'cad_start_title' : F.cad ? 'cad_reopen' : 'cad_import'
+  return <section className={`mw-group cad-import${variant === 'start' ? ' cad-start' : ''}`}><h4>{t(head)}</h4>
     <div className="cad-open">
       <button type="button" className="btn btn-ghost" disabled={off || busy} onClick={() => input.current?.click()}><FileUp size={14} />{t(busy ? 'cad_reading' : 'cad_import_btn')}</button>
       <input ref={input} type="file" accept=".dxf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void open(f) }} />
-      <span className="mw-note">{t('cad_import_hint')}</span>
+      <span className="mw-note">{t(variant === 'start' ? 'cad_start_hint' : 'cad_import_hint')}</span>
+      {variant === 'start' && <button type="button" className="btn btn-ghost" disabled={off || busy} onClick={setStartManual}>{t('cad_to_manual')}</button>}
     </div>
     {msg && <p className={msg.kind === 'err' ? 'mw-error' : 'pe-tip'} role={msg.kind === 'err' ? 'alert' : 'status'}>{msg.text}</p>}
     {L && g && <div className="cad-panel">
@@ -152,7 +160,9 @@ export function CadImport({ off }: { off: boolean }) {
         {!!suggestion?.removed.length && useShape && <p className="mw-note">{t('cad_shape_hint')}</p>}
         {g.axes.some((a) => !a.main) && <p className="mw-note">{t('cad_partial_hint')}</p>}
         {result && <div className="fr-plan-stat"><span><b>{t('cad_result', nx, ny)}</b></span>
-          <span>X <b>{spans(result.xs).join(', ')}</b> m</span><span>Y <b>{spans(result.ys).join(', ')}</b> m</span></div>}
+          <span>X <b>{spans(result.xs).join(', ')}</b> m</span><span>Y <b>{spans(result.ys).join(', ')}</b> m</span>
+          <span>{t('cad_dim_summary', srcAll.filter((k) => k === 'dim').length, srcAll.length)}</span></div>}
+        {srcAll.includes('conflict') && <p className="mw-error" role="alert">{t('cad_conflicts', srcAll.filter((k) => k === 'conflict').length)}</p>}
         {(nx > MAX_SPANS || ny > MAX_SPANS) && <p className="mw-error" role="alert">{t('cad_too_many')}</p>}
         <p className="mw-note">{t('cad_apply_note')}</p>
         <button type="button" className="btn btn-c" disabled={off || !canApply} onClick={() => void apply()}>{t('cad_apply')}</button>

@@ -19,6 +19,10 @@ interface Props {
   onCell?(i: number, j: number, state: PanelState): void
   onEdge?(axis: Axis, i: number, j: number): void
   onSpan?(axis: Axis, at: number): void
+  /** DXF 밑그림 선 (스펙 좌표 m) */
+  underlay?: [number, number, number, number][]
+  /** 스팬 출처 — 치수(dim)·도면 선(geom)·불일치(conflict) */
+  spanSrc?: { X: string[]; Y: string[] }
 }
 
 /** 미리보기 — 바뀌는 삼각형 영역과 붙임/복구(add) 여부 */
@@ -31,7 +35,7 @@ function triGhost(st: PanelState, c: Corner): { corners: Corner[]; add: boolean 
   return { corners: [c, ...diagonalOf(c)], add: false }
 }
 
-export function FramePlan({ spec, mode = 'view', tool = 'cell', disabled, selectedSpan, onCell, onEdge, onSpan }: Props) {
+export function FramePlan({ spec, mode = 'view', tool = 'cell', disabled, selectedSpan, onCell, onEdge, onSpan, underlay, spanSrc }: Props) {
   const { xs, ys } = spec
   const n = xs.length - 1, m = ys.length - 1
   const W = 440, H = 320, pad = 46
@@ -96,7 +100,8 @@ export function FramePlan({ spec, mode = 'view', tool = 'cell', disabled, select
 
   const dim = (axis: Axis, at: number, x: number, y: number, len: number, anchor: 'middle' | 'start') => {
     const sel = selectedSpan?.axis === axis && selectedSpan.at === at, click = !!onSpan && !disabled
-    return <text key={`d${axis}${at}`} className={`fr-dim${click ? ' click' : ''}${sel ? ' sel' : ''}`} x={x} y={y} textAnchor={anchor} onClick={click ? () => onSpan!(axis, at) : undefined}>{+len.toFixed(3)}</text>
+    const src = spanSrc?.[axis][at]
+    return <text key={`d${axis}${at}`} className={`fr-dim${click ? ' click' : ''}${sel ? ' sel' : ''}${src ? ` src-${src}` : ''}`} x={x} y={y} textAnchor={anchor} onClick={click ? () => onSpan!(axis, at) : undefined}>{+len.toFixed(3)}</text>
   }
   const selBand = selectedSpan && (selectedSpan.axis === 'X'
     ? <rect className="fr-span-sel" x={X(xs[selectedSpan.at])} y={Y(ys.at(-1)!) - 6} width={(xs[selectedSpan.at + 1] - xs[selectedSpan.at]) * k} height={(ys.at(-1)! - ys[0]) * k + 12} />
@@ -104,6 +109,7 @@ export function FramePlan({ spec, mode = 'view', tool = 'cell', disabled, select
 
   return <div className={`mw-sketch fr-plan${mode !== 'view' ? ' fr-plan-edit' : ''}${mode === 'cells' && tool === 'tri' ? ' fr-tool-tri' : ''}`}>
     <svg viewBox={`0 0 ${W} ${H}`} focusable="false" onPointerUp={() => { paint.current = null }} onPointerLeave={() => { paint.current = null; setHover(null) }} style={{ touchAction: mode === 'cells' ? 'none' : undefined }}>
+      {underlay && <g className="fr-underlay">{underlay.map(([x1, y1, x2, y2], q) => <line key={q} x1={X(x1)} y1={Y(y1)} x2={X(x2)} y2={Y(y2)} />)}</g>}
       {selBand}
       {cells}
       {edges}

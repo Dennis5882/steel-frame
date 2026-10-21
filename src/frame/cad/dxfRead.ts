@@ -1,6 +1,8 @@
 /* DXF 읽기 (순수) — 바이트 → 인코딩 판별(decodeDxf) → dxf 라이브러리(skymakerolof/dxf, MIT) 파싱 → 블록 펼치기 → 단순 객체.
    축망 가져오기(axisGrid.ts)가 쓰는 객체만 남긴다: 선분(LINE·폴리라인 각 변), 글자(TEXT·MTEXT·ATTRIB), 원.
    ATTDEF(블록 속성 정의)는 기본값('A' 등)만 들고 있어 글자로 쓰지 않는다 — 분해된 축 번호 블록에서 실제 번호가 아니다(zg test2.dxf).
+   DIMENSION: 라이브러리는 측정점(13·14)·글자 위치(11)만 주고 표시 값은 치수 블록(*D…) 안의 글자에만 있다 → 블록에서 꺼내
+   DIM(측정 구간 + 표시 값)과 TEXT(표시 글자, 축척 판정·치수 우선 스팬에 쓰임)를 함께 만든다.
    좌표는 도면 단위 그대로다. mm 환산은 axisGrid.ts(단위·축척). */
 import { Helper } from 'dxf'
 import { decodeDxfBytes } from './decodeDxf'
@@ -10,6 +12,8 @@ export type CadEntity =
   | { type: 'LINE'; layer: string; a: Pt; b: Pt }
   | { type: 'TEXT'; layer: string; p: Pt; text: string; h: number }
   | { type: 'CIRCLE'; layer: string; p: Pt; r: number }
+  /** 치수 — 측정점 a·b, 표시 값(도면 단위 기준 숫자, 글자가 숫자가 아니면 null) */
+  | { type: 'DIM'; layer: string; a: Pt; b: Pt; p: Pt; value: number | null }
 
 export interface CadDrawing {
   entities: CadEntity[]
@@ -47,6 +51,12 @@ export function readDxf(bytes: Uint8Array): CadDrawing {
   const helper = new Helper(decodeDxfBytes(bytes))
   const raw: any[] = helper.denormalised ?? []
   const entities: CadEntity[] = [], skipped: Record<string, number> = {}
+  const blocks = new Map<string, any[]>((helper.parsed?.blocks ?? []).map((b: any) => [String(b.name), b.entities ?? []]))
+  /** 치수 블록의 표시 글자 (MTEXT/TEXT 중 숫자를 담은 첫 글자) */
+  const dimText = (name: string): string => {
+    for (const q of blocks.get(name) ?? []) if (q.type === 'MTEXT' || q.type === 'TEXT') { const s = cleanText(q.string ?? q.text ?? ''); if (s) return s }
+    return ''
+  }
   for (const e of raw) {
     const layer = String(e.layer ?? '0'), ts: Transform[] | undefined = e.transforms
     const pt = (x: number, y: number) => transform({ x, y }, ts)
@@ -69,6 +79,14 @@ export function readDxf(bytes: Uint8Array): CadDrawing {
         break
       }
       case 'CIRCLE': entities.push({ type: 'CIRCLE', layer, p: pt(e.x, e.y), r: e.r * scaleOf(ts) }); break
+      case 'DIMENSION': {
+        if (!e.measureStart || !e.measureEnd) { skipped.DIMENSION = (skipped.DIMENSION ?? 0) + 1; break }
+        const s = dimText(String(e.block ?? '')), num = s.replace(/[,\s]/g, '').match(/^\d+(?:\.\d+)?$/)
+        const p = pt(e.textMidpoint?.x ?? e.measureStart.x, e.textMidpoint?.y ?? e.measureStart.y)
+        entities.push({ type: 'DIM', layer, a: pt(e.measureStart.x, e.measureStart.y), b: pt(e.measureEnd.x, e.measureEnd.y), p, value: num ? Number(num[0]) : null })
+        if (s) entities.push({ type: 'TEXT', layer, p, text: s, h: 0 })
+        break
+      }
       default: skipped[e.type] = (skipped[e.type] ?? 0) + 1
     }
   }

@@ -44,6 +44,9 @@ export interface GridImport {
   toGrid(p: Pt): Pt
   /** 이 축망을 읽은 범위 (도면 단위, 여유 포함) */
   area?: ScaleBox
+  /** 치수 (축망 좌표 mm): 측정 구간이 있는 치수(DIMENSION)와 숫자 글자(분해된 치수) — 치수 우선 스팬(snapGrid)에 쓴다 */
+  dims: { dir: 'X' | 'Y'; from: number; to: number; value: number }[]
+  numTexts: { x: number; y: number; value: number }[]
   /** 주축만 — 스펙 좌표 (m, 첫 주축 = 0) */
   xs: number[]; ys: number[]
   skippedDiagonal: number
@@ -209,7 +212,17 @@ export function extractAxisGrid(d: CadDrawing, o: GridOptions = {}): GridImport 
   const xs = toM(mains('X')), ys = toM(mains('Y'))
   if (xs.length < 2 || ys.length < 2) warnings.push('few_axes')
   const toGrid = (p: Pt) => { const q = rot(p, rad); return { x: q.x * mmPerUnit, y: q.y * mmPerUnit } }
-  return { layers, candidates, unitMm, unitGuessed, scale, mmPerUnit, rotationDeg, axes, toGrid, area: padded, xs, ys, skippedDiagonal, warnings: [...new Set(warnings)] }
+  /* 치수 표시 값은 도면 단위 기준 참값 (2배 출도의 DIMLFAC 0.5 는 이미 반영돼 있다) → mm = 값 × 단위 */
+  const dims: GridImport['dims'] = [], numTexts: GridImport['numTexts'] = []
+  for (const e of ents) {
+    if (e.type === 'DIM' && e.value !== null) {
+      const a = toGrid(e.a), b = toGrid(e.b), horiz = Math.abs(b.x - a.x) >= Math.abs(b.y - a.y)
+      dims.push(horiz ? { dir: 'X', from: Math.min(a.x, b.x), to: Math.max(a.x, b.x), value: e.value * unitMm } : { dir: 'Y', from: Math.min(a.y, b.y), to: Math.max(a.y, b.y), value: e.value * unitMm })
+    } else if (e.type === 'TEXT' && /^\d{3,6}(?:\.\d+)?$/.test(e.text.trim())) {
+      const q = toGrid(e.p); numTexts.push({ x: q.x, y: q.y, value: Number(e.text.trim()) * unitMm })
+    }
+  }
+  return { layers, candidates, unitMm, unitGuessed, scale, mmPerUnit, rotationDeg, axes, toGrid, area: padded, dims, numTexts, xs, ys, skippedDiagonal, warnings: [...new Set(warnings)] }
 }
 
 export interface AxisRegion { box: ScaleBox; lines: number }
@@ -323,17 +336,69 @@ export function suggestShape(g: GridImport, extra: AxisLine[], cols: ColumnShape
 /** 같은 위치(1 mm) 축선은 하나 — 위치순 */
 const dedupe = (a: AxisLine[]) => [...a].sort((p, q) => p.pos - q.pos).filter((v, i, arr) => !i || Math.abs(v.pos - arr[i - 1].pos) > 1)
 
-/** 가져온 축망을 스펙에 넣기 — 주축 + 고른 부분 축선, 축 번호(도면 번호, 쓸 수 없거나 겹치면 그 방향은 기본 번호).
-    평면 형상: shape 가 있으면 그 뺀 패널, 없으면 전체. 삼각 패널과 가새는 축 번호가 바뀌므로 비운다 */
-export function applyAxisGrid(spec: FrameSpec, g: GridImport, extra: AxisLine[] = [], shape?: ShapeSuggestion | null): FrameSpec {
+/* ── 치수 우선 스팬 ──
+   스팬(인접 격자선 사이)마다 그 구간을 재는 치수를 찾는다:
+   1) DIMENSION 의 측정 구간이 스팬 양 끝과 맞는 것 (끝마다 ±max(50 mm, 1 %))
+   2) 없으면 분해된 치수 글자(숫자) 중 스팬 가운데(±20 %)에 있고 값이 스팬과 가까운 것
+   치수 값이 선 좌표와 max(30 mm, 2 %) 안이면 치수 값을 쓴다('dim'). 구간이 맞는 치수(1)인데 더 다르면 선 좌표를 쓰고 '불일치'('conflict').
+   치수가 없으면 선 좌표(1 mm 반올림, 'geom'). 좌표는 첫 격자선부터 스팬을 더해 다시 만든다 */
+export type SpanSource = 'dim' | 'geom' | 'conflict'
+export interface SnappedGrid {
+  /** 격자선 (선택된 부분 축선 포함, 위치순) */
+  X: AxisLine[]; Y: AxisLine[]
+  /** 스펙 좌표 (m, 첫 격자선 = 0) — 치수 우선 */
+  xs: number[]; ys: number[]
+  /** 스팬별 출처, 불일치일 때 치수 값 (mm) */
+  srcX: SpanSource[]; srcY: SpanSource[]
+  dimX: (number | null)[]; dimY: (number | null)[]
+  /** 첫 격자선 위치 (축망 좌표 mm) — 밑그림 원점 */
+  origin: Pt
+}
+function snapDir(g: GridImport, lines: AxisLine[], dir: 'X' | 'Y'): { coords: number[]; src: SpanSource[]; dim: (number | null)[] } {
+  const pos = lines.map((a) => a.pos), src: SpanSource[] = [], dim: (number | null)[] = [], spans: number[] = []
+  for (let k = 0; k + 1 < pos.length; k++) {
+    const a = pos[k], b = pos[k + 1], L = b - a, endTol = Math.max(50, 0.01 * L), accept = Math.max(30, 0.02 * L)
+    const exact = g.dims.filter((d) => d.dir === dir && Math.abs(d.from - a) <= endTol && Math.abs(d.to - b) <= endTol)
+    const mid = (a + b) / 2
+    const loose = g.numTexts.filter((t) => Math.abs((dir === 'X' ? t.x : t.y) - mid) <= 0.2 * L && Math.abs(t.value - L) <= accept)
+      .sort((p, q) => Math.abs((dir === 'X' ? p.x : p.y) - mid) - Math.abs((dir === 'X' ? q.x : q.y) - mid))
+    const v = exact[0]?.value ?? loose[0]?.value
+    if (v !== undefined && Math.abs(v - L) <= accept) { spans.push(v); src.push('dim'); dim.push(v) }
+    else if (exact.length) { spans.push(Math.round(L)); src.push('conflict'); dim.push(exact[0].value) }
+    else { spans.push(Math.round(L)); src.push('geom'); dim.push(null) }
+  }
+  const coords = spans.reduce<number[]>((c, sp) => [...c, Math.round((c.at(-1)! + sp / 1000) * 1e6) / 1e6], [0])
+  return { coords, src, dim }
+}
+export function snapGrid(g: GridImport, extra: AxisLine[] = []): SnappedGrid {
   const X = dedupe([...g.axes.filter((a) => a.dir === 'X' && a.main), ...extra.filter((a) => a.dir === 'X')])
   const Y = dedupe([...g.axes.filter((a) => a.dir === 'Y' && a.main), ...extra.filter((a) => a.dir === 'Y')])
-  const m = (a: AxisLine[]) => a.map((v) => Math.round(v.pos - (a[0]?.pos ?? 0)) / 1000)
+  const sx = snapDir(g, X, 'X'), sy = snapDir(g, Y, 'Y')
+  return { X, Y, xs: X.length ? sx.coords : [], ys: Y.length ? sy.coords : [], srcX: sx.src, srcY: sy.src, dimX: sx.dim, dimY: sy.dim, origin: { x: X[0]?.pos ?? 0, y: Y[0]?.pos ?? 0 } }
+}
+
+/** 밑그림 — 축·기둥·벽 레이어 선을 스펙 좌표(m, 첫 격자선 = 0)로. 많으면 앞에서 자른다 */
+export function underlayLines(d: CadDrawing, g: GridImport, origin: Pt, layers: string[], max = 8000): [number, number, number, number][] {
+  const inArea = (p: Pt) => !g.area || (p.x >= g.area.minX && p.x <= g.area.maxX && p.y >= g.area.minY && p.y <= g.area.maxY)
+  const out: [number, number, number, number][] = []
+  for (const e of d.entities) {
+    if (out.length >= max) break
+    if (e.type !== 'LINE' || !layers.includes(e.layer) || !inArea(e.a)) continue
+    const a = g.toGrid(e.a), b = g.toGrid(e.b), r = (v: number) => Math.round(v) / 1000
+    out.push([r(a.x - origin.x), r(a.y - origin.y), r(b.x - origin.x), r(b.y - origin.y)])
+  }
+  return out
+}
+
+/** 가져온 축망을 스펙에 넣기 — 주축 + 고른 부분 축선(스팬은 치수 우선, snapGrid), 축 번호(도면 번호, 쓸 수 없거나 겹치면 그 방향은 기본 번호).
+    평면 형상: shape 가 있으면 그 뺀 패널, 없으면 전체. 삼각 패널과 가새는 축 번호가 바뀌므로 비운다 */
+export function applyAxisGrid(spec: FrameSpec, g: GridImport, extra: AxisLine[] = [], shape?: ShapeSuggestion | null): FrameSpec {
+  const { X, Y, xs, ys } = snapGrid(g, extra)
   const labels = (a: AxisLine[], dir: 'X' | 'Y') => {
     const l = a.map((v) => v.label)
     return l.every((v) => LABEL_OK.test(v)) && new Set(l).size === l.length ? l : a.map((_, i) => autoLabel(dir, i))
   }
   const lx = labels(X, 'X'), ly = labels(Y, 'Y')
   const isAuto = lx.every((l, i) => l === autoLabel('X', i)) && ly.every((l, i) => l === autoLabel('Y', i))
-  return { ...spec, xs: m(X), ys: m(Y), removed: shape?.removed ?? [], cuts: [], braces: [], axisLabels: isAuto ? undefined : { x: lx, y: ly } }
+  return { ...spec, xs, ys, removed: shape?.removed ?? [], cuts: [], braces: [], axisLabels: isAuto ? undefined : { x: lx, y: ly } }
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, ArrowRight, Building2, Check, CheckCircle2, Plus, Send, Trash2 } from 'lucide-react'
 import { t, type I18nKey } from '../../i18n'
 import { useStore } from '../../state/store'
-import { F, FRAME_STEPS, REVIEW_STEP, draftModel, draftPayloads, editDraft, goStep } from '../../frame/state'
+import { F, FRAME_STEPS, REVIEW_STEP, draftModel, draftPayloads, editDraft, goStep, setCadLocked, type FrameCad } from '../../frame/state'
 import { frameSectionNames } from '../../frame/sections'
 import { ALPHA_MAX, SFI, gravityTotals, tgOf } from '../../frame/loads'
 import type { Axis, CnSeismicSpec, FrameSpec } from '../../frame/types'
@@ -101,7 +101,28 @@ function ShapeIcon({ shape }: { shape: PlanShape }) {
     return <rect key={k} x={i * w + 0.5} y={26 - (j + 1) * h + 0.5} width={w - 1} height={h - 1} fill={off.has(`${i},${j}`) ? 'none' : 'var(--cyan)'} stroke="var(--border)" strokeWidth=".6" /> })}</svg>
 }
 
+/** DXF 축망 요약 — 파일, 스팬, 치수 출처, 불일치, 잠금/풀기 */
+function CadSummary({ spec, cad, off }: { spec: FrameSpec; cad: FrameCad; off: boolean }) {
+  const dims = [...cad.srcX, ...cad.srcY], nDim = dims.filter((k) => k === 'dim').length, nConf = dims.filter((k) => k === 'conflict').length
+  const conflicts = (['X', 'Y'] as const).flatMap((ax) => (ax === 'X' ? cad.srcX : cad.srcY).flatMap((k, i) => k !== 'conflict' ? [] : [{ ax, i }]))
+  const c = (ax: Axis) => cad.snapshot[ax === 'X' ? 'xs' : 'ys']
+  return <section className="mw-group cad-start"><h4>{t('cad_src_title')}</h4>
+    <div className="cad-source"><b>{cad.file}</b>
+      <span>X <b>{spansOf(c('X')).join(', ')}</b> m</span><span>Y <b>{spansOf(c('Y')).join(', ')}</b> m</span></div>
+    <p className="mw-note">{t('cad_src_counts', nDim, dims.length, nConf)}</p>
+    {conflicts.length > 0 && <ul className="cad-warn">{conflicts.map(({ ax, i }) => {
+      const geo = +(c(ax)[i + 1] - c(ax)[i]).toFixed(3), dim = ((ax === 'X' ? cad.dimX : cad.dimY)[i] ?? 0) / 1000
+      return <li key={`${ax}${i}`}>{t('cad_conflict', ax, axisLabel(spec, ax, i), axisLabel(spec, ax, i + 1), geo, +dim.toFixed(3))}</li>
+    })}</ul>}
+    {cad.locked ? <><p className="mw-note">{t('cad_locked_hint')}</p><button type="button" className="btn btn-ghost" disabled={off} onClick={() => setCadLocked(false)}>{t('cad_unlock')}</button></>
+      : <><p className="mw-note">{t('cad_unlocked_note')}</p><button type="button" className="btn btn-ghost" disabled={off} onClick={() => setCadLocked(true)}>{t('cad_relock')}</button></>}
+  </section>
+}
+
 function GridStep({ spec, off }: { spec: FrameSpec; off: boolean }) {
+  const cad = F.cad, locked = !!cad?.locked
+  /* DXF 로 시작 — 가져오기 전에는 가져오기 화면만 */
+  if (F.start === 'dxf' && !cad) return <CadImport off={off} variant="start" />
   const n = spec.xs.length - 1, m = spec.ys.length - 1
   const { model } = draftModel(spec)
   const connected = planConnected(spec)
@@ -118,32 +139,34 @@ function GridStep({ spec, off }: { spec: FrameSpec; off: boolean }) {
     setGrid(s, sel.axis === 'X' ? c : s.xs, sel.axis === 'Y' ? c : s.ys)
   })
   return <>
-    <section className="mw-group"><h4>{t('fr_grid')}</h4>
+    {cad && <CadSummary spec={spec} cad={cad} off={off} />}
+    {!locked && <section className="mw-group"><h4>{t('fr_grid')}</h4>
       <div className="fr-axes">
         <AxisRow axis="X" coords={spec.xs} disabled={off} onChange={(c) => editDraft((s) => setGrid(s, c, s.ys))} />
         <AxisRow axis="Y" coords={spec.ys} disabled={off} onChange={(c) => editDraft((s) => setGrid(s, s.xs, c))} />
       </div>
       <p className="mw-note">{t('fr_grid_hint')}</p>
-    </section>
+    </section>}
     <section className="mw-group"><h4>{t('fr_axis_labels')}</h4>
       <div className="fr-axes"><LabelRow spec={spec} axis="X" disabled={off} /><LabelRow spec={spec} axis="Y" disabled={off} /></div>
       <p className="mw-note">{t('fr_axis_labels_hint')}</p>
     </section>
     <CadImport off={off} />
     <section className="mw-group"><h4>{t('fr_shape')}</h4>
-      <div className="fr-shapes" role="group" aria-label={t('fr_shape')}>{PLAN_SHAPES.map((sh) => {
+      {!locked && <div className="fr-shapes" role="group" aria-label={t('fr_shape')}>{PLAN_SHAPES.map((sh) => {
         const fits = shapeFits(sh, n, m)
         return <button key={sh} type="button" disabled={off || !fits} title={fits ? t(`fr_shape_${sh}`) : t('fr_shape_min', SHAPE_MIN[sh][0], SHAPE_MIN[sh][1])}
           onClick={() => editDraft((s) => applyShape(s, sh))}><ShapeIcon shape={sh} /><span>{t(`fr_shape_${sh}`)}</span></button>
-      })}</div>
+      })}</div>}
       <div className="fr-tools" role="group" aria-label={t('fr_tool')}>
         <button type="button" aria-pressed={tool === 'cell'} onClick={() => setTool('cell')}>▦ {t('fr_tool_cell')}</button>
         <button type="button" aria-pressed={tool === 'tri'} onClick={() => setTool('tri')}>◩ {t('fr_tool_tri')}</button>
       </div>
       <p className="mw-note">{t(tool === 'cell' ? 'fr_cells_hint' : 'fr_tri_hint')}</p>
-      <FramePlan spec={spec} mode="cells" tool={tool} disabled={off} selectedSpan={sel} onSpan={(axis, at) => setSel(sel?.axis === axis && sel.at === at ? null : { axis, at })}
+      <FramePlan spec={spec} mode="cells" tool={tool} disabled={off} selectedSpan={locked ? null : sel} underlay={cad?.lines} spanSrc={locked ? { X: cad!.srcX, Y: cad!.srcY } : undefined}
+        onSpan={locked ? undefined : (axis, at) => setSel(sel?.axis === axis && sel.at === at ? null : { axis, at })}
         onCell={(i, j, st) => editDraft((s) => setPanelState(s, i, j, st))} />
-      {sel && <div className="fr-spanbar"><b>{label(sel.axis, sel.at)}</b>
+      {sel && !locked && <div className="fr-spanbar"><b>{label(sel.axis, sel.at)}</b>
         <div className="pe-in"><NumCell value={selLen} disabled={off} onChange={setLen} /><span className="pe-u">m</span></div>
         <button type="button" className="btn btn-ghost" disabled={off} onClick={() => editDraft((s) => insertSpan(s, sel.axis, sel.at, selLen))}>{t(sel.axis === 'X' ? 'fr_insert_left' : 'fr_insert_below')}</button>
         <button type="button" className="btn btn-ghost" disabled={off} onClick={() => { editDraft((s) => insertSpan(s, sel.axis, sel.at + 1, selLen)); setSel({ ...sel, at: sel.at + 1 }) }}>{t(sel.axis === 'X' ? 'fr_insert_right' : 'fr_insert_above')}</button>
