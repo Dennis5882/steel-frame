@@ -77,7 +77,9 @@ DELETE /db/MATL/9                            → 재료 9만 삭제
 - 층 자료(`ope/STOR`)를 만든 뒤 절점을 PUT하면, 값을 원래대로 되돌려도 `doc/anal`에서 `Check Changed Story Information` 창이 뜬다("Entered story data does not match to the current model…", 버튼 Update Story Data… / Continue / Cancel). 그동안 모든 호출이 응답하지 않는다.
   - 앱에서는 이렇게 일어난다: 사용자가 Gen에서 모델을 고쳐 해석이 막힘(동일성 비교) → Gen에서 되돌림(비교 통과) → 다시 해석 → 15분 대기.
   - 대조: 같은 절차에서 해석 전에 `ope/STOR`를 다시 부르면 창 없이 해석된다(8 s). 부르지 않으면 90 s 무응답 뒤 창을 확인했다.
-- **조치**: 화면의 해석(`actions/frame.ts analyzeCore`)은 해석 직전에 `run.ts storyData()`(ope/STOR + STYP·LTOM·EIGV·SPFC·SPLC·LCOM-GEN 다시 PUT)를 부른다. 전송(`sendFrame`)도 같은 함수를 쓴다. 다시 만든 뒤의 결과는 기준 예제와 같다(T1 1.046 s, 보 0.907·기둥 0.439·가새 1.129).
+- **조치**: 해석은 `run.ts analyze(req, P, save)` 하나로 한다: `storyData()`(ope/STOR + STYP·LTOM·EIGV·SPFC·SPLC·LCOM-GEN 다시 PUT) → 저장 → `doc/anal`. 화면(`actions/frame.ts analyzeCore`)·`runRound`·`live-frame`·`live-sync`가 같이 쓰고, 전송(`sendFrame`)도 `storyData()`를 쓴다. 다시 만든 뒤의 결과는 기준 예제와 같다(T1 1.046 s, 보 0.907·기둥 0.439·가새 1.129). 회귀: `scripts/live-sync.ts`가 절점을 옮겼다 되돌린 뒤 재해석한다(9 s, T1 같음).
+- `ope/STOR` 응답은 `message`가 아니라 만든 STOR 표(`{ STOR: {…} }`)다 → `expectOk`로는 확인할 수 없어 층 수로 확인한다. PUT 응답은 넣은 항목을 돌려준다(개수로 확인).
+- `ope/STOR`는 STOR의 받는 폭·중심·편심(`WIND_FLOOR_WIDTH_*`·`WIND_CENTER_*`·`WIND_ECCENT_*`·`SEIS_ACC_ECCENT_*`)을 평면과 인수로 다시 계산해 쓴다(보낸 `WIND_FLOOR_WIDTH_X` 16 → 24). 그래서 동일성 비교(`frameSyncPayload`)는 STOR의 이름·높이·강막만 본다. 앱은 풍하중을 절점하중으로 넣으므로 이 값은 결과에 쓰이지 않는다. Gen에서 층 높이를 바꾸면 해석 전에 멈춘다(`live-sync` 확인).
 - 창 닫기: 최상위 창 `Check Changed Story Information`의 자식 `Button "Cancel"`에 `PostMessage(BM_CLICK)`가 들었다(UI Automation 목록에는 늦게 나타나 Win32 `EnumWindows`로 찾았다).
 - 공장 앱도 `ope/STOR`를 쓴다면 같은 상황이 생길 수 있다(확인 필요).
 

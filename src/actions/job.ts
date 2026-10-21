@@ -9,7 +9,6 @@ import { QuantityError } from '../domain/quantities'
 import { GenChangedError } from './genSync'
 import { diffText } from '../domain/genSync'
 import { isConnectionError } from '../mapi/timeouts'
-import { F } from '../frame/state'
 
 export class Cancelled extends Error {
   constructor() { super('cancelled') }
@@ -80,8 +79,13 @@ export function failMsg(e: unknown, failKey: (m: string) => string): string {
   return msg
 }
 
+/** 취소 때 'Gen 에 모델이 다 들어 있나' — 기본은 공장 앱 규칙(S.built: 전송 시작 때 비우고 끝나면 채운다).
+    다른 앱(골조 actions/frame.ts)은 자기 상태로 바꿔 끼운다. 공장 앱 사본에도 같은 고리를 두면 된다 (기획서 3.2 공통 모듈) */
+let modelComplete = (): boolean => !!S.built
+export function setModelComplete(f: () => boolean): void { modelComplete = f }
+
 function failText(e: unknown, failKey: (m: string) => string): string {
-  if (e instanceof Cancelled) return S.built || F.built ? t('job_cancelled') : t('job_cancelled_model')
+  if (e instanceof Cancelled) return modelComplete() ? t('job_cancelled') : t('job_cancelled_model')
   if (e instanceof GenChangedError) return failKey(t('gen_changed', e.diffs.length, e.diffs.slice(0, 5).map((d) => `· ${diffText(d)}`).join('<br>')))
   if (e instanceof ResultValidationError) return failKey(t('results_invalid', [e.table, t(`rv_${e.issue}`), e.where].filter(Boolean).join(' · ')))
   if (e instanceof QuantityError) return failKey(t('q_invalid', e.where))

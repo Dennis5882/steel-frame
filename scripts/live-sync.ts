@@ -2,6 +2,8 @@
    Run: npx tsx scripts/live-sync.ts < /dev/null   (키: stdin → MAPI_KEY → .env)
    현재 문서를 C:/temp 에 백업 저장한 뒤 새 문서에 예제를 만들고 해석한다.
    1) 보낸 그대로면 FRAME_SYNC_DBS 차이 0  2) 절점 하나를 Gen 에서 옮기면 차이를 잡고, 되돌리면 다시 0
+   2-1) 되돌린 모델을 화면과 같은 analyze 로 다시 해석 — 층 확인 창(gen-api-cautions.md 4-2) 없이 끝나고 고유치가 같은지
+   2-2) 층 정의(STOR)를 Gen 에서 바꾸면 차이를 잡고, 되돌리면 다시 0
    3) 1 ms 한도 호출 → MidasConnectionError (isConnectionError)  4) EIGENVALUEMODE COMPONENTS ['Mode'] 가 SUB_TABLES 를 주는지 (읽기만) */
 import { MidasClient } from 'midas-nx'
 import { readMapiKey } from './mapi-key'
@@ -23,8 +25,8 @@ const check = (c: boolean, m: string) => { console.log(`${c ? 'PASS' : 'FAIL'} $
 expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_backup_${stamp}.mgbx` }), 'backup')
 const model = buildFrame(TUTORIAL_SPEC), P = framePayloads(TUTORIAL_SPEC, model)
 await sendFrame(req, P, model)
-expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_frame_${stamp}_sync.mgbx` }), 'save')
-await analyze(req)
+const save = async () => expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_frame_${stamp}_sync.mgbx` }), 'save')
+await analyze(req, P, save)
 
 const sent = frameSyncPayload(P)
 /* 화면 assertGenSync 와 같은 비교 (domain/genSync.ts compareGen) */
@@ -47,6 +49,19 @@ const d1 = await sync()
 check(d1.some((d) => d.db === 'NODE' && d.id === id), `moved node ${id} is caught: ${d1.map(diffText).join('; ')}`)
 await req('PUT', '/db/NODE', { Assign: { [id]: orig } })
 check((await sync()).length === 0, 'node moved back → no diffs')
+
+/* 되돌린 모델 재해석 — 층 자료를 다시 만들지 않으면 여기서 Gen 확인 창이 떠 doc/anal 이 멈춘다 */
+const t0 = Date.now()
+await analyze(req, P, save)
+const ea = parseEigen((await req('POST', '/post/TABLE', eigenRequest()))?.EV)
+check(!!ea && ea.periods[0] === ef?.periods[0], `re-analysis after the revert: ${((Date.now() - t0) / 1000).toFixed(1)} s, T1 ${ea?.periods[0]} s (before ${ef?.periods[0]})`)
+
+const sid = Object.keys((P as any).STOR)[0], sorig = (P as any).STOR[sid]
+await req('PUT', '/db/STOR', { Assign: { [sid]: { ...sorig, STORY_LEVEL: sorig.STORY_LEVEL + 0.1 } } })
+const d2 = await sync()
+check(d2.some((d) => d.db === 'STOR'), `changed story level is caught: ${d2.map(diffText).join('; ')}`)
+await req('PUT', '/db/STOR', { Assign: { [sid]: sorig } })
+check((await sync()).length === 0, 'story level moved back → no diffs')
 
 try { await client.request('GET', '/db/NODE', undefined, { timeout: 1 }); check(false, '1 ms call should time out') }
 catch (e) { check(isConnectionError(e), `1 ms call → ${(e as Error).name}: connection error`) }

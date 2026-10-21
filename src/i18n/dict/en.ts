@@ -544,6 +544,9 @@ export const en = {
   g_help_2: 'Release notes',
   g_help_2_cmd: 'release notes',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_4_4_1: 'If analysis is interrupted, the previous results are cleared first, so results that no longer match the Gen model are not shown.',
+  rn_v1_4_4_2: 'Cancelling a re-send or an optimisation round partway now says the model must be created again, since Gen holds a half-sent model.',
+  rn_v1_4_4_3: 'Story heights or names changed in Gen are now caught before analysis, and Gen rejecting the story data stops the analysis with a message.',
   rn_v1_4_3_1: 'Analysis no longer stalls after a change in Gen was undone: if a model edited in Gen and moved back was analysed, Gen opened a story-data dialog and the app waited up to 15 minutes. The story data are now rebuilt right before analysis.',
   rn_v1_4_3_2: 'Messages that still named the factory app now point to Create in Gen NX, and cancelling a task no longer always says the model was only partly sent.',
   rn_v1_4_2_1: 'Simpler start: two cards, Import DXF and New frame. Design codes and scope fold away. Import DXF opens a large drop area (drag a file in or click). After reading, the axis preview, spans and Use these axes come first, and unit, scale and layers fold into Recognition settings. New frame no longer shows the DXF section.',

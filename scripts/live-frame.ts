@@ -39,9 +39,8 @@ try {
   log('sent / readback', counts, '· ISO zoom fit', await fitView(req, `C:/temp/sf_view_${stamp}.png`))
   evidence.counts = counts
 
-  expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_frame_${stamp}.mgbx` }), 'save model')
   const t0 = Date.now()
-  await analyze(req)
+  await analyze(req, P, async () => expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_frame_${stamp}.mgbx` }), 'save model'))
   log(`analysis ${((Date.now() - t0) / 1000).toFixed(1)} s`)
 
   const A = await collectAnalysis(req, spec, model, P, (m) => log(`  ${m}`))

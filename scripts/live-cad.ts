@@ -9,6 +9,7 @@ import { DEFAULT_TIMEOUT_MS, callTimeout } from '../src/mapi/timeouts'
 import { readDxf } from '../src/frame/cad/dxfRead'
 import { applyAxisGrid, axisLayers, columnLayers, extractAxisGrid, extractColumns, extractWalls, snapGrid, suggestShape } from '../src/frame/cad/axisGrid'
 import { FRAME_TEMPLATES } from '../src/frame/templates'
+import { buildFrame } from '../src/frame/geometry'
 import { FRAME_SYNC_DBS, expectOk, frameSyncPayload, runRound } from '../src/frame/run'
 import { compareGen, diffText } from '../src/domain/genSync'
 import { axisLabel } from '../src/frame/plan'
@@ -40,11 +41,15 @@ const span = (c: number[]) => c.slice(1).map((v, i) => +(v - c[i]).toFixed(3))
 console.log(`DXF ${file}: X ${span(spec.xs).join(', ')} · Y ${span(spec.ys).join(', ')} · removed ${spec.removed.length} · partial ${extra.length}`)
 console.log(`  span source X ${snapped.srcX.join('/')} · Y ${snapped.srcY.join('/')}`)
 console.log(`  labels X ${spec.axisLabels?.x.join(' ')} · Y ${spec.axisLabels?.y.join(' ')}`)
-/* 가장자리 가새 — 첫 X 줄·첫 Y 줄의 두 번째 칸 */
-spec.braces = [
-  { axis: 'X', line: spec.ys[0], a: spec.xs[1], b: spec.xs[2], type: 'chevron' },
-  { axis: 'Y', line: spec.xs[0], a: spec.ys[1], b: spec.ys[2], type: 'chevron' },
-]
+/* 가장자리 가새 — 방향마다 첫 X 줄·첫 Y 줄에서 평면 안에 있는 첫 칸 (두 번째 칸부터, 없으면 첫 칸). 백업 전에 정해 도면이 맞지 않으면 Gen 을 건드리지 않는다 */
+const fits = (b: FrameSpec['braces'][number]) => { try { buildFrame({ ...spec, braces: [b] }); return true } catch { return false } }
+const edgeBrace = (axis: 'X' | 'Y'): FrameSpec['braces'][number] | undefined => {
+  const c = axis === 'X' ? spec.xs : spec.ys, line = axis === 'X' ? spec.ys[0] : spec.xs[0]
+  const bays = c.slice(1).map((b, i) => ({ axis, line, a: c[i], b, type: 'chevron' as const }))
+  return [...bays.slice(1), ...bays.slice(0, 1)].find(fits)
+}
+spec.braces = (['X', 'Y'] as const).map(edgeBrace).filter((b) => !!b)
+check(spec.braces.length === 2, `edge braces ${spec.braces.map((b) => `${b.axis} ${b.a}–${b.b} @ ${b.line}`).join(' · ') || 'none fit the plan'}`)
 
 /* 2) Gen: 백업 → runRound (화면 analyzeFrame·designFrame 과 같은 run.ts) */
 expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_backup_${stamp}.mgbx` }), 'backup')
@@ -72,9 +77,12 @@ check(r.review.length > 0, `story review items ${r.review.length}: ${r.review.ma
 const labels = [...spec.xs.map((_, i) => axisLabel(spec, 'X', i)), ...spec.ys.map((_, j) => axisLabel(spec, 'Y', j))]
 const html = buildFrameReport({ built: { spec, model: r.model, P: r.P, file: `C:/temp/sf_frame_cad_${stamp}.mgbx` }, analysis: r.analysis, review: r.review, design: r.design })
 const dxf = buildFrameDxf({ spec, model: r.model, title: 'live-cad', date: stamp.slice(0, 8), version: 'live', colStrongAxis: r.analysis.colStrongAxis })
-const missR = labels.filter((l) => !html.includes(l)), missD = labels.filter((l) => !dxf.includes(l))
-check(!missR.length, `report shows all ${labels.length} axis labels${missR.length ? ` — missing ${missR.join(' ')}` : ''}`)
-check(!missD.length, `drawing DXF shows all axis labels${missD.length ? ` — missing ${missD.join(' ')}` : ''}`)
+/* 계산서: 축망 표의 스팬 칸 '라벨–라벨 길이' (report.ts spanRow). 도면: GRID 레이어 TEXT 의 글자(축 번호 원) — 짧은 번호가 다른 글자에 섞여 통과하지 않게 자리를 정해 찾는다 */
+const spanCells = (['X', 'Y'] as const).flatMap((ax) => (ax === 'X' ? spec.xs : spec.ys).slice(1).map((_, i) => `${axisLabel(spec, ax, i)}–${axisLabel(spec, ax, i + 1)} `))
+const gridTexts = new Set(dxf.split('\n0\nTEXT\n').slice(1).filter((e) => e.startsWith('8\nGRID\n')).map((e) => e.split('\n1\n')[1]?.split('\n')[0]))
+const missR = spanCells.filter((c) => !html.includes(c)), missD = labels.filter((l) => !gridTexts.has(l))
+check(!missR.length, `report span table names all ${labels.length} axis labels${missR.length ? ` — missing ${missR.join(' ')}` : ''}`)
+check(!missD.length, `drawing DXF grid bubbles show all axis labels${missD.length ? ` — missing ${missD.join(' ')}` : ''}`)
 
 mkdirSync('output/frame', { recursive: true })
 writeFileSync(`output/frame/live-cad-${stamp}.json`, JSON.stringify({ stamp, file, spec, counts: r.counts, T1: eig?.periods[0], diffs: diffs.length, byRole: r.design.byRole, review: r.review }, null, 1))

@@ -26,18 +26,24 @@ const DB_AFTER_STOR = ['STYP', 'LTOM', 'EIGV', 'SPFC', 'SPLC', 'LCOM-GEN'] as co
 export const EIGEN_COMPONENTS = ['Node', 'Mode', 'UX', 'UY', 'UZ', 'RX', 'RY', 'RZ']
 /** 주기·참여질량 표 요청 본문 */
 export const eigenRequest = () => ({ Argument: { TABLE_NAME: 'EV', TABLE_TYPE: 'EIGENVALUEMODE', UNIT: { FORCE: 'KN', DIST: 'M' }, COMPONENTS: EIGEN_COMPONENTS } })
-/** Gen 모델 동일성 비교 대상 (actions/frame.ts assertFrameGen) — 공통 목록 + 바닥하중 */
-export const FRAME_SYNC_DBS = [...SYNC_DBS, 'FBLD', 'FBLA'] as const
-/** 비교할 보낸 값 — Gen 이 다시 쓰는 필드는 뺀다. MATL PARAM.MASS: 보낸 7.85 t/m³ 를 Gen 이 0 으로 저장(라이브 2026-10-21, 층 질량은 DEN 으로 맞음) */
+/** Gen 모델 동일성 비교 대상 (actions/frame.ts assertFrameGen) — 공통 목록 + 바닥하중 + 층 정의.
+    STOR: 해석 직전 ope/STOR 는 Gen 의 층 정의로 층 자료를 다시 만드므로, Gen 에서 층을 고쳤으면 해석 전에 멈춘다 */
+export const FRAME_SYNC_DBS = [...SYNC_DBS, 'FBLD', 'FBLA', 'STOR'] as const
+/** 비교할 보낸 값 — Gen 이 다시 쓰는 필드는 뺀다. MATL PARAM.MASS: 보낸 7.85 t/m³ 를 Gen 이 0 으로 저장(라이브 2026-10-21, 층 질량은 DEN 으로 맞음).
+    STOR: ope/STOR 가 받는 폭·중심·편심을 평면과 SEIS_ECC/WIND_ECC 인수로 다시 계산해 쓴다(라이브 2026-10-21) → 층 정의(이름·높이·강막)만 */
 export function frameSyncPayload(P: FramePayloads): Record<string, Record<string, unknown>> {
   const out: Record<string, Record<string, unknown>> = {}
   for (const db of FRAME_SYNC_DBS) if ((P as any)[db]) out[db] = (P as any)[db]
   if (out.MATL) out.MATL = Object.fromEntries(Object.entries(out.MATL).map(([id, m]: [string, any]) =>
     [id, { ...m, PARAM: (m.PARAM ?? []).map(({ MASS: _mass, ...p }: Record<string, unknown>) => p) }]))
+  if (out.STOR) out.STOR = Object.fromEntries(Object.entries(out.STOR).map(([id, st]: [string, any]) =>
+    [id, { STORY_NAME: st.STORY_NAME, STORY_LEVEL: st.STORY_LEVEL, bFLOOR_DIAPHRAGM: st.bFLOOR_DIAPHRAGM }]))
   return out
 }
-/** 전송 호출 수 (진행 막대) — new + DB + ope/STOR + 읽기 5 */
-export const SEND_CALLS = 1 + DB_ORDER.length + 1 + DB_AFTER_STOR.length + 5
+/** 층 자료 호출 수 — ope/STOR + 층에 기대는 DB */
+export const STORY_CALLS = 1 + DB_AFTER_STOR.length
+/** 전송 호출 수 (진행 막대) — new + DB + 층 자료 + 읽기 5 */
+export const SEND_CALLS = 1 + DB_ORDER.length + STORY_CALLS + 5
 
 export interface SendCounts { NODE: number; ELEM: number; CONS: number; FBLA: number; LCOM: number }
 
@@ -56,14 +62,24 @@ export async function sendFrame(req: Request, P: FramePayloads, model: FrameMode
 
 /** 층 자료 만들기(ope/STOR) + 층에 기대는 자료(질량·RS·조합). 전송 때, 그리고 화면의 해석 직전에 다시 부른다:
     Gen 에서 절점을 고쳤다 되돌리면(동일성 비교는 통과) Gen 이 해석 때 'Check Changed Story Information' 창을 띄워 MAPI 가 멈춘다.
-    층 자료를 다시 만들면 창이 뜨지 않는다 (라이브 2026-10-21, gen-api-cautions.md 4-2) */
-export const STORY_CALLS = 1 + DB_AFTER_STOR.length
+    층 자료를 다시 만들면 창이 뜨지 않는다 (라이브 2026-10-21, gen-api-cautions.md 4-2).
+    거부는 HTTP 200 으로 오므로 돌려준 항목 수를 확인한다: ope/STOR 는 만든 STOR 표({ STOR: {…} }, 메시지 없음 — 라이브 2026-10-21), PUT 은 넣은 항목 */
 export async function storyData(req: Request, P: FramePayloads): Promise<void> {
-  await req('POST', '/ope/STOR', { Argument: { SEIS_ECC: { INC_SEIS_ECC: true, SEIS_ECC_VALUE: 5 }, WIND_ECC: { INC_WIND_ECC: true, WIND_ECC_VALUE: 15 } } })
-  for (const db of DB_AFTER_STOR) await req('PUT', `/db/${db}`, { Assign: (P as any)[db] })
+  const items = (r: any, db: string) => Object.keys(r?.[db] ?? {}).length
+  const expect = (r: any, db: string, want: number, what: string) => {
+    if (items(r, db) !== want) throw new Error(`${what}: ${items(r, db)}/${want} — ${r?.message ?? JSON.stringify(r).slice(0, 200)}`)
+  }
+  expect(await req('POST', '/ope/STOR', { Argument: { SEIS_ECC: { INC_SEIS_ECC: true, SEIS_ECC_VALUE: 5 }, WIND_ECC: { INC_WIND_ECC: true, WIND_ECC_VALUE: 15 } } }), 'STOR', Object.keys(P.STOR).length, 'ope/STOR')
+  for (const db of DB_AFTER_STOR) expect(await req('PUT', `/db/${db}`, { Assign: (P as any)[db] }), db, Object.keys((P as any)[db]).length, `PUT ${db}`)
 }
 
-export async function analyze(req: Request): Promise<void> {
+/** 해석 호출 수 — 층 자료 + 저장 + doc/anal */
+export const ANALYZE_CALLS = STORY_CALLS + 2
+/** 해석 — 층 자료 다시 만들기 → 저장(save, 저장 안 된 문서의 해석은 확인 창: gen-api-cautions.md 2) → doc/anal.
+    화면(actions/frame.ts)·runRound·라이브 스크립트가 모두 이 순서를 쓴다 */
+export async function analyze(req: Request, P: FramePayloads, save: () => Promise<unknown>): Promise<void> {
+  await storyData(req, P)
+  await save()
   expectOk(await req('POST', '/doc/anal', {}), 'doc/anal')
 }
 
@@ -169,9 +185,8 @@ export async function runRound(req: Request, spec: FrameSpec, o: { save(): Promi
   const counts = await sendFrame(req, P, model)
   if (o.viewPath) await fitView(req, o.viewPath)
   o.onSent?.(model, P, counts)
-  o.stage?.('st_anal', 2)
-  await o.save()
-  await analyze(req)
+  o.stage?.('st_anal', ANALYZE_CALLS)
+  await analyze(req, P, o.save)
   o.stage?.('st_results', COLLECT_CALLS)
   const analysis = await collectAnalysis(req, spec, model, P, o.log)
   o.stage?.('st_results', P.combos.length)

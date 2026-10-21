@@ -6,12 +6,12 @@ import { S, notify } from '../state/store'
 import { addMsg, escapeHtml, tab } from '../state/ui'
 import { confirmAction } from '../components/ConfirmDialog'
 import { autoSave, autoSavePath } from './save'
-import { beginJob, checkCancel, endJob, failMsg, setIter, stage } from './job'
+import { beginJob, checkCancel, endJob, failMsg, setIter, setModelComplete, stage } from './job'
 import { assertGenSync } from './genSync'
 import { isConnectionError } from '../mapi/timeouts'
 import { buildFrame } from '../frame/geometry'
 import { framePayloads } from '../frame/gen'
-import { FRAME_SYNC_DBS, frameSyncPayload, analyze, collectAnalysis, collectForces, COLLECT_CALLS, equilibriumError, expectOk, fitView, runRound, SEND_CALLS, sendFrame, STORY_CALLS, storyData, VIEW_CALLS } from '../frame/run'
+import { FRAME_SYNC_DBS, frameSyncPayload, analyze, ANALYZE_CALLS, collectAnalysis, collectForces, COLLECT_CALLS, equilibriumError, expectOk, fitView, runRound, SEND_CALLS, sendFrame, VIEW_CALLS } from '../frame/run'
 import { storyReview } from '../frame/story'
 import { designMembers, memberFails, runFrameDesign } from '../frame/design'
 import type { Request } from '../frame/results'
@@ -20,6 +20,11 @@ import { OPT_MAX_ITER, optIter, optSummary, optimizeLoop, sectionsKey, type Fram
 import type { FrameModel, FrameSpec } from '../frame/types'
 
 const req: Request = (m, p, b) => mapi(m, p, b as Record<string, unknown> | undefined)
+
+/** Gen 문서가 보내다 만 상태 — doc/new 직전에 켜고 F.built 를 새 모델로 바꾼 뒤 끈다. 실패·취소하면 켜진 채로 남아
+    (다시 생성하거나 복원할 때까지) 취소 안내가 '다시 생성' 문구가 된다. F.built 는 전송이 끝날 때까지 이전 모델이라 그것만으론 모른다 */
+let genPartial = false
+setModelComplete(() => !!F.built && !genPartial)
 
 /** 해석·검토·최적화·Gen 캡처 첫 단계 — 지금 Gen 문서가 앱이 보낸 모델(F.built.P)과 같은지. 다르면 GenChangedError 로 멈춘다.
     Gen 에서 직접 고친 경우와, 응답 없이 끊긴 생성·복원을 Gen 이 대화상자를 닫은 뒤 뒤늦게 실행한 경우를 같이 잡는다 */
@@ -36,11 +41,13 @@ async function sendCore(spec: FrameSpec, model: FrameModel): Promise<void> {
   stage('st_send', SEND_CALLS + VIEW_CALLS + 2)
   S.restorePoint = await autoSave('backup')
   notify()
+  genPartial = true
   const counts = await sendFrame(req, P, model)
   await fitView(req, viewPng())
   const file = await autoSave('model')
   clearResults()
   F.built = { spec: clone(spec), model, P, counts, file }
+  genPartial = false
   S.genChanged = 0 // 새로 보낸 모델 — 이전 Gen 변경 감지는 의미 없음
   S.modelRevision++
 }
@@ -48,12 +55,10 @@ async function sendCore(spec: FrameSpec, model: FrameModel): Promise<void> {
 /** 해석 + 층 표 회수 */
 async function analyzeCore(): Promise<void> {
   const b = F.built!
-  stage('st_anal', 2 + STORY_CALLS)
-  await storyData(req, b.P) // Gen 에서 고쳤다 되돌린 모델의 층 확인 창 방지 (run.ts storyData)
-  await autoSave('model') // 저장 안 된 문서의 해석은 확인 창을 띄운다 (gen-api-cautions.md 2)
-  clearResults()
+  stage('st_anal', ANALYZE_CALLS)
+  clearResults() // 층 자료 PUT 부터 Gen 결과가 무효 — 중간에 끊겨도 지난 결과가 남지 않게 먼저 비운다
   notify()
-  await analyze(req)
+  await analyze(req, b.P, () => autoSave('model'))
   stage('st_results', COLLECT_CALLS)
   F.analysis = await collectAnalysis(req, b.spec, b.model, b.P)
 }
@@ -195,12 +200,14 @@ async function runState(sections: FrameSections): Promise<void> {
   clearResults()
   notify()
   let file = ''
+  genPartial = true
   const r = await runRound(req, spec, {
     save: async () => { file = await autoSave('model') ?? '' },
     viewPath: viewPng(),
     stage: (k, n) => stage(k, n),
     onSent: (model, P, counts) => {
       F.built = { spec: clone(spec), model, P, counts, file: '' }
+      genPartial = false
       S.genChanged = 0
       F.draft = clone(spec)
       S.modelRevision++
@@ -224,6 +231,7 @@ export async function restoreFrameBackup(): Promise<void> {
     await autoSave('model')
     expectOk(await mapi('POST', '/doc/open', { Argument: path }, path), 'doc/open')
     F.built = null
+    genPartial = false
     S.genChanged = 0
     clearResults()
     F.opt = null
