@@ -81,7 +81,9 @@ DELETE /db/MATL/9                            → 재료 9만 삭제
 - `ope/STOR` 응답은 `message`가 아니라 만든 STOR 표(`{ STOR: {…} }`)다 → `expectOk`로는 확인할 수 없어 층 수로 확인한다. PUT 응답은 넣은 항목을 돌려준다(개수로 확인).
 - `ope/STOR`는 STOR의 받는 폭·중심·편심(`WIND_FLOOR_WIDTH_*`·`WIND_CENTER_*`·`WIND_ECCENT_*`·`SEIS_ACC_ECCENT_*`)을 평면과 인수로 다시 계산해 쓴다(보낸 `WIND_FLOOR_WIDTH_X` 16 → 24). 그래서 동일성 비교(`frameSyncPayload`)는 STOR의 이름·높이·강막만 본다. 앱은 풍하중을 절점하중으로 넣으므로 이 값은 결과에 쓰이지 않는다. Gen에서 층 높이를 바꾸면 해석 전에 멈춘다(`live-sync` 확인).
 - 창 닫기: 최상위 창 `Check Changed Story Information`의 자식 `Button "Cancel"`에 `PostMessage(BM_CLICK)`가 들었다(UI Automation 목록에는 늦게 나타나 Win32 `EnumWindows`로 찾았다).
-- 공장 앱도 `ope/STOR`를 쓴다면 같은 상황이 생길 수 있다(확인 필요).
+- 공장 앱은 `ope/STOR`를 쓰지 않아 해당 없다(2026-10-22 소스 확인). RC 앱(story)은 층 자료를 쓰므로 Gen에서 모델을 고친 뒤 해석하는 흐름이 있으면 같은 창이 뜰 수 있다.
+- 해석 직전 `storyData`가 STYP·LTOM·EIGV·SPFC·SPLC·LCOM-GEN을 앱 값으로 다시 PUT하므로, 이 DB들도 동일성 비교에 넣어 Gen에서 고쳤으면 덮어쓰기 전에 멈춘다(v1.4.5). GET에 나오지 않는 보낸 필드는 비교에서 뺀다: EIGV `iITER`·`iDIM`·`TOL`·`FRMIN`·`FRMAX`(LANCZOS에서 안 쓰는 값), SPFC `CALC_OPT`, SPLC `aACCECC_ECCEN_LIST`(라이브 2026-10-22).
+- 시험으로 바꾼 값을 되돌릴 때는 **바꾸기 전에 GET한 값**을 PUT한다. 처음 보낸 값을 다시 PUT하면 Gen이 다시 계산해 둔 필드(STOR 받는 폭 등)까지 덮어써서, 비교 대상이 아닌 필드가 어긋난 채로 남는다.
 
 ## 5. 재료 `GB50017-17(S)`
 

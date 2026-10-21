@@ -26,9 +26,12 @@ const DB_AFTER_STOR = ['STYP', 'LTOM', 'EIGV', 'SPFC', 'SPLC', 'LCOM-GEN'] as co
 export const EIGEN_COMPONENTS = ['Node', 'Mode', 'UX', 'UY', 'UZ', 'RX', 'RY', 'RZ']
 /** 주기·참여질량 표 요청 본문 */
 export const eigenRequest = () => ({ Argument: { TABLE_NAME: 'EV', TABLE_TYPE: 'EIGENVALUEMODE', UNIT: { FORCE: 'KN', DIST: 'M' }, COMPONENTS: EIGEN_COMPONENTS } })
-/** Gen 모델 동일성 비교 대상 (actions/frame.ts assertFrameGen) — 공통 목록 + 바닥하중 + 층 정의.
-    STOR: 해석 직전 ope/STOR 는 Gen 의 층 정의로 층 자료를 다시 만드므로, Gen 에서 층을 고쳤으면 해석 전에 멈춘다 */
-export const FRAME_SYNC_DBS = [...SYNC_DBS, 'FBLD', 'FBLA', 'STOR'] as const
+/** Gen 모델 동일성 비교 대상 (actions/frame.ts assertFrameGen) — 공통 목록(LCOM-GEN 포함) + 바닥하중 + 층 정의 + 층 자료 DB.
+    STOR: 해석 직전 ope/STOR 는 Gen 의 층 정의로 층 자료를 다시 만드므로, Gen 에서 층을 고쳤으면 해석 전에 멈춘다.
+    STYP·LTOM·EIGV·SPFC·SPLC: 해석 직전 storyData 가 앱 값으로 다시 PUT 하므로, Gen 에서 고쳤으면 말없이 덮어쓰지 않고 멈춘다 */
+export const FRAME_SYNC_DBS = [...SYNC_DBS, 'FBLD', 'FBLA', 'STOR', 'STYP', 'LTOM', 'EIGV', 'SPFC', 'SPLC'] as const
+/** Gen GET 에 나오지 않는 보낸 필드 (라이브 2026-10-22, 5개 DB 전 필드 대조) — 비교에서 뺀다. EIGV 는 LANCZOS 에서 쓰지 않는 반복·허용오차·진동수 범위 */
+const SYNC_OMITTED: Record<string, readonly string[]> = { EIGV: ['iITER', 'iDIM', 'TOL', 'FRMIN', 'FRMAX'], SPFC: ['CALC_OPT'], SPLC: ['aACCECC_ECCEN_LIST'] }
 /** 비교할 보낸 값 — Gen 이 다시 쓰는 필드는 뺀다. MATL PARAM.MASS: 보낸 7.85 t/m³ 를 Gen 이 0 으로 저장(라이브 2026-10-21, 층 질량은 DEN 으로 맞음).
     STOR: ope/STOR 가 받는 폭·중심·편심을 평면과 SEIS_ECC/WIND_ECC 인수로 다시 계산해 쓴다(라이브 2026-10-21) → 층 정의(이름·높이·강막)만 */
 export function frameSyncPayload(P: FramePayloads): Record<string, Record<string, unknown>> {
@@ -38,6 +41,8 @@ export function frameSyncPayload(P: FramePayloads): Record<string, Record<string
     [id, { ...m, PARAM: (m.PARAM ?? []).map(({ MASS: _mass, ...p }: Record<string, unknown>) => p) }]))
   if (out.STOR) out.STOR = Object.fromEntries(Object.entries(out.STOR).map(([id, st]: [string, any]) =>
     [id, { STORY_NAME: st.STORY_NAME, STORY_LEVEL: st.STORY_LEVEL, bFLOOR_DIAPHRAGM: st.bFLOOR_DIAPHRAGM }]))
+  for (const [db, fields] of Object.entries(SYNC_OMITTED)) if (out[db]) out[db] = Object.fromEntries(Object.entries(out[db]).map(([id, v]: [string, any]) =>
+    [id, Object.fromEntries(Object.entries(v).filter(([k]) => !fields.includes(k)))]))
   return out
 }
 /** 층 자료 호출 수 — ope/STOR + 층에 기대는 DB */
@@ -67,18 +72,18 @@ export async function sendFrame(req: Request, P: FramePayloads, model: FrameMode
 export async function storyData(req: Request, P: FramePayloads): Promise<void> {
   const items = (r: any, db: string) => Object.keys(r?.[db] ?? {}).length
   const expect = (r: any, db: string, want: number, what: string) => {
-    if (items(r, db) !== want) throw new Error(`${what}: ${items(r, db)}/${want} — ${r?.message ?? JSON.stringify(r).slice(0, 200)}`)
+    if (items(r, db) !== want) throw new Error(`${what}: ${items(r, db)}/${want} — ${r?.message ?? String(JSON.stringify(r) ?? 'no answer').slice(0, 200)}`)
   }
   expect(await req('POST', '/ope/STOR', { Argument: { SEIS_ECC: { INC_SEIS_ECC: true, SEIS_ECC_VALUE: 5 }, WIND_ECC: { INC_WIND_ECC: true, WIND_ECC_VALUE: 15 } } }), 'STOR', Object.keys(P.STOR).length, 'ope/STOR')
   for (const db of DB_AFTER_STOR) expect(await req('PUT', `/db/${db}`, { Assign: (P as any)[db] }), db, Object.keys((P as any)[db]).length, `PUT ${db}`)
 }
 
-/** 해석 호출 수 — 층 자료 + 저장 + doc/anal */
-export const ANALYZE_CALLS = STORY_CALLS + 2
+/** 해석 호출 수 — (층 자료) + 저장 + doc/anal */
+export const analyzeCalls = (story = true) => (story ? STORY_CALLS : 0) + 2
 /** 해석 — 층 자료 다시 만들기 → 저장(save, 저장 안 된 문서의 해석은 확인 창: gen-api-cautions.md 2) → doc/anal.
-    화면(actions/frame.ts)·runRound·라이브 스크립트가 모두 이 순서를 쓴다 */
-export async function analyze(req: Request, P: FramePayloads, save: () => Promise<unknown>): Promise<void> {
-  await storyData(req, P)
+    화면(actions/frame.ts)·runRound·라이브 스크립트가 모두 이 순서를 쓴다. story = false: 방금 sendFrame 으로 보낸 문서(층 자료가 이미 새것) */
+export async function analyze(req: Request, P: FramePayloads, save: () => Promise<unknown>, story = true): Promise<void> {
+  if (story) await storyData(req, P)
   await save()
   expectOk(await req('POST', '/doc/anal', {}), 'doc/anal')
 }
@@ -185,8 +190,8 @@ export async function runRound(req: Request, spec: FrameSpec, o: { save(): Promi
   const counts = await sendFrame(req, P, model)
   if (o.viewPath) await fitView(req, o.viewPath)
   o.onSent?.(model, P, counts)
-  o.stage?.('st_anal', ANALYZE_CALLS)
-  await analyze(req, P, o.save)
+  o.stage?.('st_anal', analyzeCalls(false))
+  await analyze(req, P, o.save, false) // sendFrame 이 층 자료를 막 만들었다
   o.stage?.('st_results', COLLECT_CALLS)
   const analysis = await collectAnalysis(req, spec, model, P, o.log)
   o.stage?.('st_results', P.combos.length)

@@ -95,9 +95,24 @@ RC 앱에서는 **격자·층고·층 데이터 생성 로직과 층 검토 지�
 | `scripts/release.mjs`, `release-check.mjs`, `verify-all.mjs`, `mapi-key.ts` | 그대로 복사 | 버전은 스틸 앱 자체 1.0.0부터. 키는 stdin → 환경변수 → `.env` |
 | `scripts/tw-golden.ts` (라이브 결과 정답 세트 형식) | 구조 복사 | CN 예제 모델의 Gen 결과를 fixture로 캡처해 오프라인 회귀 |
 
-공통 모듈을 이 앱에서 고친 기록 (공장 앱 반영 여부):
+#### 공통 모듈 변경 기록 (공장 앱 반영 여부)
 
-- `actions/job.ts` (v1.4.4): 취소 문구를 고르는 'Gen 에 모델이 다 들어 있나' 판정을 `setModelComplete()` 고리로 뺐다. 기본값은 공장 규칙(`!!S.built`) 그대로라 공장 앱 동작은 같다. 골조 앱은 `actions/frame.ts`에서 `F.built`·전송 중 표시로 바꿔 끼운다. 공장 앱 반영: 필요 없음(동작 변화 없음). 두 사본을 맞출 때 같이 옮기면 된다.
+공통 모듈(위 표에서 '그대로 복사'·'재사용')이나 공통 문구 키를 고치면 여기에 한 줄씩 적는다. 판정은 반영 권장 / 필요 없음 / 반영 금지 중 하나로 한다. 공장 앱 기준은 `E:/AI Study/smart-midas-steel`(2026-10-22 `b0348bf`)이다.
+
+| 버전 | 모듈 | 바꾼 것 | 공장 앱 |
+| --- | --- | --- | --- |
+| v1.1.0 | `actions/save.ts` | 자동 저장 접두 `sms_` → `sf_` | 반영 금지 (앱 고유) |
+| v1.3.0 | `report/docx.ts`·`pdf.ts` | `<img>` data URL 그림 지원 추가 | 필요 없음 (공장 계산서는 SVG만, 옮겨도 무해) |
+| v1.3.7~1.3.9 | `mapi/client.ts`·`mapi/timeouts.ts` | 호출별 대기 한도: 기본 3분, `/doc/anal`·`/doc/open`만 15분. 응답 없이 끊긴 호출에 `connection` 표시 | 필요 없음 (공장 앱은 자체 `TIMEOUTS` 3단계 한도를 이미 가짐) |
+| v1.3.8~1.3.9 | `actions/job.ts`·`state/store.ts`·`mapi/client.ts`·`actions/save.ts` | 응답 없는 호출 뒤 같은 작업의 나머지 호출을 보내지 않음(`Job.noAnswer`), 실패 문구에 `gen_no_answer` 안내 | **반영 권장**: 공장 앱에는 없다. 대화상자가 뜬 동안 보낸 요청이 Gen 대기열에 쌓였다가 대화상자를 닫은 뒤 실행된다 |
+| v1.3.8 | `actions/genSync.ts` | `assertGenSync(sent, dbList)` 매개변수 (기본값은 공장 그대로) | 필요 없음 |
+| v1.3.9 | `domain/genSync.ts` | `compareGen()` 추가 (화면·`live-sync` 공용) | 필요 없음 (추가만) |
+| v1.4.3 | i18n `gen_changed`·`job_cancelled_model`·`model_empty` | 공장 버튼 이름([공장 생성])을 [Gen NX에 모델 생성]·"왼쪽에서 시작"으로 바꿈 | **반영 금지**: 공장 앱 버튼은 [공장 생성]이다. 이 저장소에 남은 공장 화면 코드(회귀용, 화면 미사용)는 문구가 골조 기준이 된다 |
+| v1.4.4 | `actions/job.ts` | 취소 문구 판정을 `setModelComplete()` 고리로 뺌 (기본값은 공장 규칙 `!!S.built`) | 필요 없음 (동작 같음). 두 사본을 맞출 때 같이 옮긴다 |
+
+이 앱에서 확인한 Gen 동작 중 공장 앱 해당 여부:
+
+- `ope/STOR` 층 확인 창(`gen-api-cautions.md` 4-2): 공장 앱은 `ope/STOR`를 쓰지 않으므로 해당 없음 (2026-10-22 소스 확인).
 
 ### 3.3 새로 작성해야 하는 핵심
 

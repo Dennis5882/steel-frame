@@ -23,7 +23,7 @@ import { designMembers, hSection, runFrameDesign } from '../src/frame/design'
 import { overturning, storyReview } from '../src/frame/story'
 import { frameCombos } from '../src/frame/loads'
 import { captureShots, comboName } from '../src/frame/captures'
-import { FRAME_SYNC_DBS, captureGen, eigenRequest, fetchEigen, frameSyncPayload } from '../src/frame/run'
+import { FRAME_SYNC_DBS, analyze, captureGen, eigenRequest, fetchEigen, frameSyncPayload, storyData } from '../src/frame/run'
 import { compareGen, dbDifferences } from '../src/domain/genSync'
 import { DEFAULT_TIMEOUT_MS, LONG_TIMEOUT_MS, callTimeout, isConnectionError } from '../src/mapi/timeouts'
 import { MidasConnectionError } from 'midas-nx'
@@ -374,6 +374,37 @@ for (const lang of ['ko', 'en', 'zh-CN', 'zh-TW'] as const) {
   const cmp2 = await compareGen(frameSyncPayload(sp), FRAME_SYNC_DBS, async (db) => genMatl[db])
   const sd = cmp2.diffs.find((d) => d.db === 'ELEM' && d.id === elemId)
   ok(cmp.diffs.length === 0 && cmp.dbs.includes('FBLA') && !!sd && String(sd.actual).includes('('), 'sync: shared compareGen - same model passes, an element with another section is caught with the section name')
+  /* 층 정의·층 자료 DB 도 비교 — 해석 직전 storyData 가 앱 값으로 다시 PUT 하므로 Gen 편집을 말없이 덮지 않게 (라이브 2026-10-22) */
+  ok(['STOR', 'STYP', 'LTOM', 'EIGV', 'SPFC', 'SPLC', 'LCOM-GEN'].every((db) => db in sync), 'sync: story definition and story-data DBs are compared')
+  const genStory = structuredClone(sp) as any
+  for (const st of Object.values(genStory.STOR) as any[]) { st.WIND_FLOOR_WIDTH_X = 99; st.SEIS_ACC_ECCENT_X = 9 } // ope/STOR 가 다시 계산해 쓰는 필드
+  for (const e of Object.values(genStory.EIGV) as any[]) for (const k of ['iITER', 'iDIM', 'TOL', 'FRMIN', 'FRMAX']) delete e[k] // GET 에 나오지 않는 필드
+  for (const f of Object.values(genStory.SPFC) as any[]) delete f.CALC_OPT
+  for (const l of Object.values(genStory.SPLC) as any[]) delete l.aACCECC_ECCEN_LIST
+  for (const m of Object.values(genStory.MATL) as any[]) m.PARAM[0].MASS = 0
+  ok((await compareGen(frameSyncPayload(sp), FRAME_SYNC_DBS, async (db) => genStory[db])).diffs.length === 0, 'sync: fields Gen rewrites (STOR widths) or leaves out (EIGV Lanczos-unused fields, SPFC CALC_OPT, SPLC eccentric list) are not reported')
+  genStory.EIGV['1'].iFREQ += 1
+  genStory.STOR['1'].STORY_LEVEL += 0.1
+  const sdiff = (await compareGen(frameSyncPayload(sp), FRAME_SYNC_DBS, async (db) => genStory[db])).diffs
+  ok(sdiff.some((d) => d.db === 'EIGV' && d.field === 'iFREQ') && sdiff.some((d) => d.db === 'STOR' && d.field === 'STORY_LEVEL'), 'sync: a mode count or story level changed in Gen is caught')
+
+  /* 층 자료 호출 확인·해석 순서 (run.ts storyData·analyze) */
+  const calls: string[] = []
+  const fake = (answer: (m: string, p: string, b: any) => any) => async (m: string, p: string, b?: unknown) => { calls.push(`${m} ${p}`); return answer(m, p, b) }
+  const echo = (m: string, p: string, b: any) => p === '/ope/STOR' ? { STOR: sp.STOR } : m === 'PUT' ? { [p.slice(4)]: b.Assign } : { message: 'MIDAS GEN NX command complete' }
+  let err = ''
+  try { await storyData(fake(() => undefined) as any, sp) } catch (e: any) { err = e?.message ?? '' }
+  ok(err.startsWith('ope/STOR: 0/') && err.includes('no answer'), `storyData: an empty answer is reported as the story-data rejection (${err})`)
+  err = ''
+  try { await storyData(fake((m, p, b) => (p === '/db/SPFC' ? { message: 'Unknown Error' } : echo(m, p, b))) as any, sp) } catch (e: any) { err = e?.message ?? '' }
+  ok(err.startsWith('PUT SPFC: 0/') && err.includes('Unknown Error'), 'storyData: a rejected PUT stops with its message')
+  calls.length = 0
+  let saved = -1
+  await analyze(fake(echo) as any, sp, async () => { saved = calls.length })
+  ok(calls[0] === 'POST /ope/STOR' && calls.at(-1) === 'POST /doc/anal' && saved === calls.length - 1, 'analyze: story data -> save -> doc/anal')
+  calls.length = 0
+  await analyze(fake(echo) as any, sp, async () => {}, false)
+  ok(calls.length === 1 && calls[0] === 'POST /doc/anal', 'analyze(story=false): right after sendFrame, story data is not rebuilt again')
 }
 
 console.log(`Frame report/drawings/optimisation: ${checks} checks passed (4 languages PDF + Word, ${elevationLines(spec).length + 2} drawing sheets, OTM, lightest sections)`)

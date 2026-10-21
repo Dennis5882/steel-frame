@@ -3,7 +3,8 @@
    현재 문서를 C:/temp 에 백업 저장한 뒤 새 문서에 예제를 만들고 해석한다.
    1) 보낸 그대로면 FRAME_SYNC_DBS 차이 0  2) 절점 하나를 Gen 에서 옮기면 차이를 잡고, 되돌리면 다시 0
    2-1) 되돌린 모델을 화면과 같은 analyze 로 다시 해석 — 층 확인 창(gen-api-cautions.md 4-2) 없이 끝나고 고유치가 같은지
-   2-2) 층 정의(STOR)를 Gen 에서 바꾸면 차이를 잡고, 되돌리면 다시 0
+   2-2) 층 정의(STOR)·층 자료 DB(EIGV)를 Gen 에서 바꾸면 차이를 잡고, 되돌리면 다시 0
+   시험으로 바꾼 값은 바꾸기 전에 GET 한 값으로 되돌린다(Gen 이 다시 계산해 둔 필드까지 원래대로 — CLAUDE.md)
    3) 1 ms 한도 호출 → MidasConnectionError (isConnectionError)  4) EIGENVALUEMODE COMPONENTS ['Mode'] 가 SUB_TABLES 를 주는지 (읽기만) */
 import { MidasClient } from 'midas-nx'
 import { readMapiKey } from './mapi-key'
@@ -43,25 +44,26 @@ console.log(`  eigen full ${JSON.stringify(full ?? null).length} B · ['Mode'] $
 check(!!ef && ef.periods[0] > 0, `full COMPONENTS: T1 ${ef?.periods[0]} s, mass X ${ef?.massX.at(-1)}%`)
 console.log(`INFO ['Mode'] only: ${es ? `T1 ${es.periods[0]} s, mass X ${es.massX.at(-1)}% Y ${es.massY.at(-1)}% — same as full: ${JSON.stringify(es) === JSON.stringify(ef)}` : 'no eigen table'}`)
 
-const id = Object.keys((P as any).NODE)[0], orig = (P as any).NODE[id]
-await req('PUT', '/db/NODE', { Assign: { [id]: { ...orig, X: orig.X + 0.1 } } })
-const d1 = await sync()
-check(d1.some((d) => d.db === 'NODE' && d.id === id), `moved node ${id} is caught: ${d1.map(diffText).join('; ')}`)
-await req('PUT', '/db/NODE', { Assign: { [id]: orig } })
-check((await sync()).length === 0, 'node moved back → no diffs')
+/* Gen 에서 한 항목을 바꿔 잡히는지 보고, 바꾸기 전 GET 값으로 되돌려 차이 0 인지 */
+const tryEdit = async (db: string, id: string, change: (v: any) => object, what: string) => {
+  const before = (await req('GET', `/db/${db}/${id}`))?.[db]?.[id]
+  await req('PUT', `/db/${db}`, { Assign: { [id]: change(before) } })
+  const d = await sync()
+  check(d.some((x) => x.db === db && x.id === id), `${what} is caught: ${d.map(diffText).join('; ')}`)
+  await req('PUT', `/db/${db}`, { Assign: { [id]: before } })
+  check((await sync()).length === 0, `${what} → reverted to the value read before the edit → no diffs`)
+}
+const nid = Object.keys((P as any).NODE)[0]
+await tryEdit('NODE', nid, (n) => ({ ...n, X: n.X + 0.1 }), `moved node ${nid}`)
 
 /* 되돌린 모델 재해석 — 층 자료를 다시 만들지 않으면 여기서 Gen 확인 창이 떠 doc/anal 이 멈춘다 */
 const t0 = Date.now()
 await analyze(req, P, save)
 const ea = parseEigen((await req('POST', '/post/TABLE', eigenRequest()))?.EV)
-check(!!ea && ea.periods[0] === ef?.periods[0], `re-analysis after the revert: ${((Date.now() - t0) / 1000).toFixed(1)} s, T1 ${ea?.periods[0]} s (before ${ef?.periods[0]})`)
+check(!!ea && !!ef && Math.abs(ea.periods[0] - ef.periods[0]) <= 1e-6 * ef.periods[0], `re-analysis after the revert: ${((Date.now() - t0) / 1000).toFixed(1)} s, T1 ${ea?.periods[0]} s (before ${ef?.periods[0]})`)
 
-const sid = Object.keys((P as any).STOR)[0], sorig = (P as any).STOR[sid]
-await req('PUT', '/db/STOR', { Assign: { [sid]: { ...sorig, STORY_LEVEL: sorig.STORY_LEVEL + 0.1 } } })
-const d2 = await sync()
-check(d2.some((d) => d.db === 'STOR'), `changed story level is caught: ${d2.map(diffText).join('; ')}`)
-await req('PUT', '/db/STOR', { Assign: { [sid]: sorig } })
-check((await sync()).length === 0, 'story level moved back → no diffs')
+await tryEdit('STOR', Object.keys((P as any).STOR)[0], (s) => ({ ...s, STORY_LEVEL: s.STORY_LEVEL + 0.1 }), 'changed story level')
+await tryEdit('EIGV', '1', (e) => ({ ...e, iFREQ: e.iFREQ + 1 }), 'changed eigen mode count (EIGV)')
 
 try { await client.request('GET', '/db/NODE', undefined, { timeout: 1 }); check(false, '1 ms call should time out') }
 catch (e) { check(isConnectionError(e), `1 ms call → ${(e as Error).name}: connection error`) }

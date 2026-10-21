@@ -11,7 +11,7 @@ import { assertGenSync } from './genSync'
 import { isConnectionError } from '../mapi/timeouts'
 import { buildFrame } from '../frame/geometry'
 import { framePayloads } from '../frame/gen'
-import { FRAME_SYNC_DBS, frameSyncPayload, analyze, ANALYZE_CALLS, collectAnalysis, collectForces, COLLECT_CALLS, equilibriumError, expectOk, fitView, runRound, SEND_CALLS, sendFrame, VIEW_CALLS } from '../frame/run'
+import { FRAME_SYNC_DBS, frameSyncPayload, analyze, analyzeCalls, collectAnalysis, collectForces, COLLECT_CALLS, equilibriumError, expectOk, fitView, runRound, SEND_CALLS, sendFrame, VIEW_CALLS } from '../frame/run'
 import { storyReview } from '../frame/story'
 import { designMembers, memberFails, runFrameDesign } from '../frame/design'
 import type { Request } from '../frame/results'
@@ -21,10 +21,11 @@ import type { FrameModel, FrameSpec } from '../frame/types'
 
 const req: Request = (m, p, b) => mapi(m, p, b as Record<string, unknown> | undefined)
 
-/** Gen 문서가 보내다 만 상태 — doc/new 직전에 켜고 F.built 를 새 모델로 바꾼 뒤 끈다. 실패·취소하면 켜진 채로 남아
-    (다시 생성하거나 복원할 때까지) 취소 안내가 '다시 생성' 문구가 된다. F.built 는 전송이 끝날 때까지 이전 모델이라 그것만으론 모른다 */
+/** Gen 문서가 보내다 만 상태 — doc/new 직전에 켜고, 전송(개수 확인)이 끝나 F.built 를 새 모델로 바꾸는 순간 끈다. 실패·취소하면 켜진 채로 남아
+    (다시 생성하거나 복원할 때까지) 취소 안내가 '다시 생성' 문구가 된다. F.built 는 전송이 끝날 때까지 이전 모델이라 그것만으론 모른다.
+    doc/new 전에 취소하면(백업 저장 중 등) Gen 은 그대로이므로 첫 생성이라도 일반 취소 문구 */
 let genPartial = false
-setModelComplete(() => !!F.built && !genPartial)
+setModelComplete(() => !genPartial)
 
 /** 해석·검토·최적화·Gen 캡처 첫 단계 — 지금 Gen 문서가 앱이 보낸 모델(F.built.P)과 같은지. 다르면 GenChangedError 로 멈춘다.
     Gen 에서 직접 고친 경우와, 응답 없이 끊긴 생성·복원을 Gen 이 대화상자를 닫은 뒤 뒤늦게 실행한 경우를 같이 잡는다 */
@@ -41,21 +42,24 @@ async function sendCore(spec: FrameSpec, model: FrameModel): Promise<void> {
   stage('st_send', SEND_CALLS + VIEW_CALLS + 2)
   S.restorePoint = await autoSave('backup')
   notify()
+  checkCancel() // 백업 중 누른 취소는 여기서 — Gen 을 건드리기 전이므로 일반 취소 문구 (켠 뒤 doc/new 까지는 동기)
   genPartial = true
   const counts = await sendFrame(req, P, model)
-  await fitView(req, viewPng())
-  const file = await autoSave('model')
+  /* Gen 에 새 모델이 다 들어갔다 — 화면·저장이 실패해도 앱은 새 모델을 가리킨다 (이전 P 와 비교해 'Gen 변경'이 나지 않게) */
   clearResults()
-  F.built = { spec: clone(spec), model, P, counts, file }
+  F.opt = null
+  F.built = { spec: clone(spec), model, P, counts, file: '' }
   genPartial = false
   S.genChanged = 0 // 새로 보낸 모델 — 이전 Gen 변경 감지는 의미 없음
   S.modelRevision++
+  await fitView(req, viewPng())
+  F.built.file = await autoSave('model')
 }
 
 /** 해석 + 층 표 회수 */
 async function analyzeCore(): Promise<void> {
   const b = F.built!
-  stage('st_anal', ANALYZE_CALLS)
+  stage('st_anal', analyzeCalls())
   clearResults() // 층 자료 PUT 부터 Gen 결과가 무효 — 중간에 끊겨도 지난 결과가 남지 않게 먼저 비운다
   notify()
   await analyze(req, b.P, () => autoSave('model'))
@@ -86,7 +90,6 @@ export async function buildFrameModel(): Promise<void> {
   tab('logP')
   try {
     await sendCore(spec, model)
-    F.opt = null
     addMsg('bot', lt('fl_build_done', model.nodes.length, model.elements.length, model.supports.length, F.built!.P.combos.length))
     S.task = 'analysis'
     S.cam = 'iso'; S.camReset++; S.viewNonce++
@@ -200,6 +203,7 @@ async function runState(sections: FrameSections): Promise<void> {
   clearResults()
   notify()
   let file = ''
+  checkCancel()
   genPartial = true
   const r = await runRound(req, spec, {
     save: async () => { file = await autoSave('model') ?? '' },

@@ -50,15 +50,28 @@ const edgeBrace = (axis: 'X' | 'Y'): FrameSpec['braces'][number] | undefined => 
 }
 spec.braces = (['X', 'Y'] as const).map(edgeBrace).filter((b) => !!b)
 check(spec.braces.length === 2, `edge braces ${spec.braces.map((b) => `${b.axis} ${b.a}–${b.b} @ ${b.line}`).join(' · ') || 'none fit the plan'}`)
+if (spec.braces.length < 2) { console.log('stopped before touching Gen: the plan has no edge bay for a brace in each direction'); process.exit(1) }
 
-/* 2) Gen: 백업 → runRound (화면 analyzeFrame·designFrame 과 같은 run.ts) */
-expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_backup_${stamp}.mgbx` }), 'backup')
+/* 2) Gen: 백업 → runRound (화면 analyzeFrame·designFrame 과 같은 run.ts). 백업 뒤 Gen 호출이 실패하면 백업 경로와 증거를 남기고 끝낸다 */
+const backup = `C:/temp/sf_backup_${stamp}.mgbx`
+const evidence = (extra: object) => {
+  mkdirSync('output/frame', { recursive: true })
+  writeFileSync(`output/frame/live-cad-${stamp}.json`, JSON.stringify({ stamp, file, backup, spec, ...extra }, null, 1))
+}
+const bail = (e: unknown): never => {
+  const error = e instanceof Error ? e.message : String(e)
+  console.log(`FAIL Gen step: ${error}`)
+  console.log(`the open Gen document was replaced — original saved as ${backup}`)
+  evidence({ error })
+  process.exit(1)
+}
+expectOk(await req('POST', '/doc/saveas', { Argument: backup }), 'backup')
 const t0 = Date.now()
-const r = await runRound(req, spec, { save: async () => expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_frame_cad_${stamp}.mgbx` }), 'save'), log: (m) => console.log('  ', m) })
+const r = await runRound(req, spec, { save: async () => expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_frame_cad_${stamp}.mgbx` }), 'save'), log: (m) => console.log('  ', m) }).catch(bail)
 console.log(`round ${((Date.now() - t0) / 1000).toFixed(1)} s · nodes ${r.model.nodes.length} · elements ${r.model.elements.length} · sent`, r.counts)
 
 /* 3) Gen 모델 = 보낸 것 (assertFrameGen 과 같은 비교) */
-const diffs = (await compareGen(frameSyncPayload(r.P), FRAME_SYNC_DBS, async (db) => (await req('GET', `/db/${db}`))?.[db])).diffs
+const diffs = (await compareGen(frameSyncPayload(r.P), FRAME_SYNC_DBS, async (db) => (await req('GET', `/db/${db}`))?.[db]).catch(bail)).diffs
 diffs.slice(0, 8).forEach((x) => console.log('  ', diffText(x)))
 check(diffs.length === 0, `Gen model matches sent (${FRAME_SYNC_DBS.join(', ')}) — ${diffs.length} diffs`)
 
@@ -84,7 +97,6 @@ const missR = spanCells.filter((c) => !html.includes(c)), missD = labels.filter(
 check(!missR.length, `report span table names all ${labels.length} axis labels${missR.length ? ` — missing ${missR.join(' ')}` : ''}`)
 check(!missD.length, `drawing DXF grid bubbles show all axis labels${missD.length ? ` — missing ${missD.join(' ')}` : ''}`)
 
-mkdirSync('output/frame', { recursive: true })
-writeFileSync(`output/frame/live-cad-${stamp}.json`, JSON.stringify({ stamp, file, spec, counts: r.counts, T1: eig?.periods[0], diffs: diffs.length, byRole: r.design.byRole, review: r.review }, null, 1))
-console.log(fails ? `${fails} live CAD check(s) failed` : 'all live CAD checks passed', `· evidence output/frame/live-cad-${stamp}.json`)
+evidence({ counts: r.counts, T1: eig?.periods[0], diffs: diffs.length, byRole: r.design.byRole, review: r.review })
+console.log(fails ? `${fails} live CAD check(s) failed` : 'all live CAD checks passed', `· evidence output/frame/live-cad-${stamp}.json · original Gen document ${backup}`)
 process.exit(fails ? 1 : 0)
