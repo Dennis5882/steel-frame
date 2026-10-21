@@ -1,12 +1,13 @@
 /* 평면도 DXF → 축망 가져오기 (轴网 단계). 엔진은 src/frame/cad (순수), 기준 문서 docs/cad-import.md.
    파일을 고르면 그때 엔진(dxf 라이브러리 포함)을 불러온다. 파일은 브라우저 안에서만 읽는다.
-   흐름: 파일 → (평면이 여러 장이면) 평면 고르기 → 레이어·단위·축척 확인 → 미리보기에서 부분 축선 고르기 → [이 축망 사용] → 확인 창 → F.draft 의 xs·ys */
+   흐름: 파일 → (평면이 여러 장이면) 평면 고르기 → 레이어·단위·축척 확인 → 미리보기에서 부분 축선 고르기 → 기둥 위치로 뺀 패널 제안(끌 수 있음)
+   → [이 축망 사용] → 확인 창 → F.draft 의 xs·ys·axisLabels·removed */
 import { useMemo, useRef, useState } from 'react'
 import { FileUp, X } from 'lucide-react'
 import { t } from '../../i18n'
 import { F, editDraft } from '../../frame/state'
 import { confirmAction } from '../ConfirmDialog'
-import type { AxisLine, AxisRegion, CadDrawing, GridImport, GridWarning } from '../../frame/cad'
+import type { AxisLine, AxisRegion, CadDrawing, ColumnShape, GridImport, GridWarning, ShapeSuggestion } from '../../frame/cad'
 
 type CadMod = typeof import('../../frame/cad')
 interface Loaded { mod: CadMod; name: string; d: CadDrawing }
@@ -29,7 +30,7 @@ function warningText(w: GridWarning, g: GridImport): string {
 }
 
 /** 미리보기 — 주축 실선, 부분 축선 점선(눌러서 넣고 빼기), 축 번호 원 */
-function AxisPreview({ g, picked, onToggle }: { g: GridImport; picked: Set<string>; onToggle(a: AxisLine): void }) {
+function AxisPreview({ g, picked, onToggle, cols, shape, extra }: { g: GridImport; picked: Set<string>; onToggle(a: AxisLine): void; cols: ColumnShape[]; shape: ShapeSuggestion | null; extra: AxisLine[] }) {
   const xs = g.axes.filter((a) => a.dir === 'X'), ys = g.axes.filter((a) => a.dir === 'Y')
   const px = [...xs.map((a) => a.pos), ...ys.flatMap((a) => [a.from, a.to])], py = [...ys.map((a) => a.pos), ...xs.flatMap((a) => [a.from, a.to])]
   if (!px.length || !py.length) return null
@@ -37,7 +38,13 @@ function AxisPreview({ g, picked, onToggle }: { g: GridImport; picked: Set<strin
   const size = Math.max(maxX - minX, maxY - minY, 1), r = size * 0.022, pad = r * 4
   const vb = `${minX - pad} ${-maxY - pad} ${maxX - minX + 2 * pad} ${maxY - minY + 2 * pad}`
   const cls = (a: AxisLine) => a.main ? 'cad-ax main' : picked.has(keyOf(a)) ? 'cad-ax picked' : 'cad-ax part'
+  /* 최종 격자선 (주축 + 고른 부분 축선) — 뺄 패널 칠하기 */
+  const lines = (dir: 'X' | 'Y') => [...g.axes.filter((a) => a.dir === dir && a.main), ...extra.filter((a) => a.dir === dir)].map((a) => a.pos).sort((a, b) => a - b).filter((v, i, arr) => !i || v - arr[i - 1] > 1)
+  const gx = lines('X'), gy = lines('Y')
+  const inView = (c: ColumnShape) => c.x >= minX - pad && c.x <= maxX + pad && c.y >= minY - pad && c.y <= maxY + pad
   return <svg className="cad-preview" viewBox={vb} role="img" aria-label={t('cad_import')}>
+    {shape?.removed.map(([i, j]) => <rect key={`o${i},${j}`} className="cad-off" x={gx[i]} y={-gy[j + 1]} width={gx[i + 1] - gx[i]} height={gy[j + 1] - gy[j]} />)}
+    {cols.filter(inView).map((c, k) => <rect key={`c${k}`} className="cad-col" x={c.x - c.w / 2} y={-c.y - c.h / 2} width={c.w} height={c.h} />)}
     {g.axes.map((a) => {
       const [x1, y1, x2, y2] = a.dir === 'X' ? [a.pos, -a.from, a.pos, -a.to] : [a.from, -a.pos, a.to, -a.pos]
       const [bx, by] = a.dir === 'X' ? [a.pos, -a.to - r * 1.6] : [a.from - r * 1.6, -a.pos]
@@ -61,6 +68,8 @@ export function CadImport({ off }: { off: boolean }) {
   const [unitMm, setUnitMm] = useState<number | undefined>()
   const [scale, setScale] = useState<number | undefined>()
   const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [colLayers, setColLayers] = useState<string[] | null>(null)
+  const [useShape, setUseShape] = useState(true)
 
   async function open(f: File) {
     setMsg(null)
@@ -71,7 +80,7 @@ export function CadImport({ off }: { off: boolean }) {
       if (bytes[0] === 0x41 && bytes[1] === 0x43 && bytes[2] === 0x31) { setMsg({ kind: 'err', text: t('cad_dwg') }); return } // 'AC1…' = DWG
       const mod = await import('../../frame/cad')
       setL({ mod, name: f.name, d: mod.readDxf(bytes) })
-      setRegion(0); setLayers(null); setUnitMm(undefined); setScale(undefined); setPicked(new Set())
+      setRegion(0); setLayers(null); setUnitMm(undefined); setScale(undefined); setPicked(new Set()); setColLayers(null); setUseShape(true)
     } catch (e) {
       setMsg({ kind: 'err', text: t('cad_read_fail', e instanceof Error ? e.message : String(e)) })
     } finally {
@@ -85,7 +94,12 @@ export function CadImport({ off }: { off: boolean }) {
   const reg = regions.length > 1 ? regions[Math.min(region, regions.length - 1)] : undefined
   const g = useMemo(() => L && L.mod.extractAxisGrid(L.d, { layers: use, unitMm, scaleFactor: scale, ...(reg ? { box: reg.box, pad: L.mod.regionPad(reg) } : {}) }), [L, use, unitMm, scale, reg])
   const extra = g ? g.axes.filter((a) => !a.main && picked.has(keyOf(a))) : []
-  const result = g && F.draft ? L!.mod.applyAxisGrid(F.draft, g, extra) : null
+  const colUse = useMemo(() => (L ? colLayers ?? L.mod.columnLayers(L.d) : []), [L, colLayers])
+  const cols = useMemo(() => (L && g ? L.mod.extractColumns(L.d, g, colUse) : []), [L, g, colUse])
+  const walls = useMemo(() => (L && g ? L.mod.extractWalls(L.d, g) : []), [L, g])
+  const suggestion = g && L ? L.mod.suggestShape(g, extra, cols, walls) : null
+  const shape = useShape ? suggestion : null
+  const result = g && F.draft ? L!.mod.applyAxisGrid(F.draft, g, extra, shape) : null
   const nx = result ? result.xs.length - 1 : 0, ny = result ? result.ys.length - 1 : 0
   const canApply = !!result && nx >= 1 && ny >= 1 && nx <= MAX_SPANS && ny <= MAX_SPANS
   const lineLayers = L ? L.d.layers.filter((l) => l.lines > 0).slice(0, 16) : []
@@ -95,7 +109,7 @@ export function CadImport({ off }: { off: boolean }) {
   async function apply() {
     if (!g || !L || !canApply) return
     if (!await confirmAction({ title: t('cad_apply'), body: t('cad_apply_note'), ok: t('cad_apply') })) return
-    editDraft((s) => { const n = L.mod.applyAxisGrid(s, g, extra); s.xs = n.xs; s.ys = n.ys; s.removed = n.removed; s.cuts = n.cuts; s.braces = n.braces })
+    editDraft((s) => { const n = L.mod.applyAxisGrid(s, g, extra, shape); s.xs = n.xs; s.ys = n.ys; s.removed = n.removed; s.cuts = n.cuts; s.braces = n.braces; s.axisLabels = n.axisLabels })
     setMsg({ kind: 'ok', text: t('cad_applied', nx, ny) })
     setL(null)
   }
@@ -125,9 +139,17 @@ export function CadImport({ off }: { off: boolean }) {
         {lineLayers.map((l) => <label key={l.name}><input type="checkbox" disabled={off} checked={use.includes(l.name)}
           onChange={(e) => { setLayers(e.target.checked ? [...use, l.name] : use.filter((n) => n !== l.name)); setPicked(new Set()); setRegion(0) }} /><span>{l.name}</span><small>{l.lines}</small></label>)}
       </fieldset>
+      <fieldset className="cad-layers"><legend>{t('cad_col_layers')}</legend>
+        {lineLayers.map((l) => <label key={l.name}><input type="checkbox" disabled={off} checked={colUse.includes(l.name)}
+          onChange={(e) => setColLayers(e.target.checked ? [...colUse, l.name] : colUse.filter((n) => n !== l.name))} /><span>{l.name}</span><small>{l.lines}</small></label>)}
+      </fieldset>
       {g.warnings.length > 0 && <ul className="cad-warn">{g.warnings.filter((w) => w !== 'few_axes' || g.axes.length > 0).map((w) => <li key={w}>{warningText(w, g)}</li>)}</ul>}
       {g.axes.length ? <>
-        <AxisPreview g={g} picked={picked} onToggle={toggle} />
+        <AxisPreview g={g} picked={picked} onToggle={toggle} cols={cols} shape={shape} extra={extra} />
+        {suggestion?.removed.length ? <label className="pe-f fr-check"><input type="checkbox" checked={useShape} disabled={off} onChange={(e) => setUseShape(e.target.checked)} />
+          <span>{t('cad_shape_use', suggestion.columns, suggestion.removed.length)}</span></label>
+          : <p className="mw-note">{suggestion ? t('cad_shape_all') : cols.length ? t('cad_shape_fail', cols.length) : t('cad_shape_none')}</p>}
+        {!!suggestion?.removed.length && useShape && <p className="mw-note">{t('cad_shape_hint')}</p>}
         {g.axes.some((a) => !a.main) && <p className="mw-note">{t('cad_partial_hint')}</p>}
         {result && <div className="fr-plan-stat"><span><b>{t('cad_result', nx, ny)}</b></span>
           <span>X <b>{spans(result.xs).join(', ')}</b> m</span><span>Y <b>{spans(result.ys).join(', ')}</b> m</span></div>}

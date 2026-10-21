@@ -12,7 +12,7 @@ import { buildFrameModel } from '../../actions/frame'
 import { NumericInput } from '../NumericInput'
 import { FramePlan } from './FramePlan'
 import { CadImport } from './CadImport'
-import { PLAN_SHAPES, SHAPE_MIN, applyShape, braceBays, coordsOf, deleteSpan, formatSpans, insertSpan, parseSpans, planConnected, setGrid, setPanelState, shapeFits, shapeRemoved, spansOf, toggleBrace, type PlanShape } from '../../frame/plan'
+import { PLAN_SHAPES, SHAPE_MIN, applyShape, axisLabel, axisLabels, parseLabels, setAxisLabels, braceBays, coordsOf, deleteSpan, formatSpans, insertSpan, parseSpans, planConnected, setGrid, setPanelState, shapeFits, shapeRemoved, spansOf, toggleBrace, type PlanShape } from '../../frame/plan'
 
 const r6 = (v: number) => +v.toFixed(6)
 
@@ -66,6 +66,23 @@ function AxisRow({ axis, coords, onChange, disabled }: { axis: Axis; coords: num
   </div>
 }
 
+/** 축 번호 한 방향 — "1, 2, 3" (축 수만큼, 겹치지 않게). 비우거나 [기본] 이면 1, 2, 3 … / A, B, C … */
+function LabelRow({ spec, axis, disabled }: { spec: FrameSpec; axis: Axis; disabled?: boolean }) {
+  const text = axisLabels(spec, axis).join(', '), n = (axis === 'X' ? spec.xs : spec.ys).length
+  const [raw, setRaw] = useState(text)
+  useEffect(() => { setRaw((r) => parseLabels(r, n)?.join(', ') === text ? r : text) }, [text, n])
+  const ok = parseLabels(raw, n)
+  return <div className="fr-axis-row">
+    <b>{axis}</b>
+    <div className="fr-axis-in">
+      <div className="pe-in fr-list"><input className="pe-numeric-list" value={raw} disabled={disabled} aria-label={t('fr_axis_labels')} aria-invalid={!ok || undefined}
+        onChange={(e) => { setRaw(e.target.value); const v = parseLabels(e.target.value, n); if (v) editDraft((s) => setAxisLabels(s, axis, v)) }} /></div>
+      <button type="button" className="btn btn-ghost" disabled={disabled || !spec.axisLabels} onClick={() => editDraft((s) => setAxisLabels(s, axis, null))}>{t('fr_axis_labels_reset')}</button>
+      {!ok && <span className="mw-error">{t('fr_axis_labels_bad', n)}</span>}
+    </div>
+  </div>
+}
+
 function Sel<T extends string | number>({ label, value, options, onChange, disabled }: { label: string; value: T; options: [T, string][]; onChange(v: T): void; disabled?: boolean }) {
   return <label className="pe-f"><span>{label}</span><div className="pe-in">
     <select value={String(value)} disabled={disabled} onChange={(e) => { const o = options.find(([k]) => String(k) === e.target.value); if (o) onChange(o[0]) }}>
@@ -93,7 +110,7 @@ function GridStep({ spec, off }: { spec: FrameSpec; off: boolean }) {
   const arr = (s: FrameSpec, a: Axis) => (a === 'X' ? s.xs : s.ys)
   const selLen = sel ? arr(spec, sel.axis)[sel.at + 1] - arr(spec, sel.axis)[sel.at] : 0
   useEffect(() => { if (sel && sel.at >= (sel.axis === 'X' ? n : m)) setSel(null) }, [n, m])
-  const label = (axis: Axis, at: number) => axis === 'X' ? `${t('fr_dir_x')} ${at + 1}–${at + 2}` : `${t('fr_dir_y')} ${String.fromCharCode(65 + at)}–${String.fromCharCode(66 + at)}`
+  const label = (axis: Axis, at: number) => `${t(axis === 'X' ? 'fr_dir_x' : 'fr_dir_y')} ${axisLabel(spec, axis, at)}–${axisLabel(spec, axis, at + 1)}`
   const setLen = (v: number) => editDraft((s) => {
     if (!sel) return
     const sp = spansOf(arr(s, sel.axis)); sp[sel.at] = v
@@ -107,6 +124,10 @@ function GridStep({ spec, off }: { spec: FrameSpec; off: boolean }) {
         <AxisRow axis="Y" coords={spec.ys} disabled={off} onChange={(c) => editDraft((s) => setGrid(s, s.xs, c))} />
       </div>
       <p className="mw-note">{t('fr_grid_hint')}</p>
+    </section>
+    <section className="mw-group"><h4>{t('fr_axis_labels')}</h4>
+      <div className="fr-axes"><LabelRow spec={spec} axis="X" disabled={off} /><LabelRow spec={spec} axis="Y" disabled={off} /></div>
+      <p className="mw-note">{t('fr_axis_labels_hint')}</p>
     </section>
     <CadImport off={off} />
     <section className="mw-group"><h4>{t('fr_shape')}</h4>

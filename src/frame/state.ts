@@ -57,6 +57,9 @@ export function editDraft(fn: (s: FrameSpec) => void): void {
   if (!F.draft) return
   fn(F.draft)
   F.draft.design.braced = { X: F.draft.braces.some((b) => b.axis === 'X'), Y: F.draft.braces.some((b) => b.axis === 'Y') }
+  /* 축 번호는 격자가 같으면 만든 모델에도 바로 — 다시 생성하지 않아도 도면·계산서에 쓰인다 */
+  const b = F.built?.spec
+  if (b && b.xs.length === F.draft.xs.length && b.ys.length === F.draft.ys.length) b.axisLabels = F.draft.axisLabels && JSON.parse(JSON.stringify(F.draft.axisLabels))
   S.viewNonce++
   notify()
 }
@@ -81,8 +84,9 @@ export function draftPayloads(spec: FrameSpec, model: FrameModel): FramePayloads
 /* 키 순서와 무관한 직렬화 — 같은 값을 다른 순서로 다시 만든 스펙을 '변경'으로 보지 않는다 */
 const canon = (v: unknown) => JSON.stringify(v, (_k, x) => x && typeof x === 'object' && !Array.isArray(x)
   ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, (x as Record<string, unknown>)[k]])) : x)
-/** 편집 스펙이 Gen 에 보낸 것과 다름 */
-export const frameStale = (f: Pick<FrameState, 'draft' | 'built'>) => !!f.built && !!f.draft && canon(f.draft) !== canon(f.built.spec)
+/** 편집 스펙이 Gen 에 보낸 것과 다름 — 축 번호(axisLabels)는 표시용이라 보지 않는다 (editDraft 가 만든 모델에 바로 반영) */
+const noLabels = ({ axisLabels: _l, ...s }: FrameSpec) => s
+export const frameStale = (f: Pick<FrameState, 'draft' | 'built'>) => !!f.built && !!f.draft && canon(noLabels(f.draft)) !== canon(noLabels(f.built.spec))
 
 export function clearResults(): void {
   F.analysis = null; F.forces = null; F.review = null; F.design = null; F.ratioView = false

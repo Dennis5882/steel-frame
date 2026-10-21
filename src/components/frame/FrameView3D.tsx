@@ -34,15 +34,15 @@ function gridTraces(spec: FrameSpec, levels: number[], cam: CamId, visible: bool
   const L: [number, number, number][][] = [], B: [number, number, number, string][] = [], D: [number, number, number, string][] = [], T: [number, number, number, string][] = []
   const mm = (v: number) => String(Math.round(v * 1000))
   if (cam === 'top') {
-    for (const [i, x] of xs.entries()) { L.push([[x, ys[0] - d * 0.7, z0], [x, ys.at(-1)! + d * 0.3, z0]]); B.push([x, ys[0] - d, z0, gridX(i)]) }
-    for (const [j, y] of ys.entries()) { L.push([[xs[0] - d * 0.7, y, z0], [xs.at(-1)! + d * 0.3, y, z0]]); B.push([xs[0] - d, y, z0, gridY(j)]) }
+    for (const [i, x] of xs.entries()) { L.push([[x, ys[0] - d * 0.7, z0], [x, ys.at(-1)! + d * 0.3, z0]]); B.push([x, ys[0] - d, z0, gridX(spec, i)]) }
+    for (const [j, y] of ys.entries()) { L.push([[xs[0] - d * 0.7, y, z0], [xs.at(-1)! + d * 0.3, y, z0]]); B.push([xs[0] - d, y, z0, gridY(spec, j)]) }
     xs.slice(1).forEach((x, i) => D.push([(x + xs[i]) / 2, ys.at(-1)! + d * 0.55, z0, mm(x - xs[i])]))
     ys.slice(1).forEach((y, j) => D.push([xs.at(-1)! + d * 0.55, (y + ys[j]) / 2, z0, mm(y - ys[j])]))
   } else {
     /* 정면 = X 축선(1,2,3…)을 y 앞면에, 측면 = Y 축선(A,B,C…)을 x 오른쪽 면에 */
     const front = cam === 'front', u = front ? xs : ys, at = front ? ys[0] : xs.at(-1)!
     const P = (v: number, z: number): [number, number, number] => (front ? [v, at, z] : [at, v, z])
-    for (const [i, v] of u.entries()) { L.push([P(v, z0 - d * 0.7), P(v, zt + d * 0.3)]); B.push([...P(v, z0 - d), front ? gridX(i) : gridY(i)]) }
+    for (const [i, v] of u.entries()) { L.push([P(v, z0 - d * 0.7), P(v, zt + d * 0.3)]); B.push([...P(v, z0 - d), front ? gridX(spec, i) : gridY(spec, i)]) }
     u.slice(1).forEach((v, i) => D.push([...P((v + u[i]) / 2, zt + d * 0.55), mm(v - u[i])]))
     levels.forEach((z, k) => { L.push([P(u[0] - d * 0.4, z), P(u.at(-1)! + d * 0.4, z)]); T.push([...P(u.at(-1)! + d * 0.5, z), `${spec.storyNames[k] ?? ''} ${z >= 0 ? '+' : ''}${z.toFixed(3)}`]) })
   }

@@ -156,10 +156,55 @@ const r6 = (v: number) => +v.toFixed(6)
 export const spansOf = (a: number[]) => a.slice(1).map((v, i) => r6(v - a[i]))
 export const coordsOf = (spans: number[], start = 0) => spans.reduce<number[]>((acc, s) => [...acc, r6(acc.at(-1)! + s)], [start])
 
+/* 축 번호 — 기본은 세로축 1, 2, 3 … (좌→우), 가로축 A, B, C … (아래→위). I·O·Z 는 숫자와 헷갈려 쓰지 않는다 (GB/T 50001 7.0.4).
+   spec.axisLabels 가 있으면 그것 (DXF 가져오기·사용자 입력). 스팬을 넣고 빼면 번호도 같이 움직인다 */
+const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXY'.split('')
+export const autoLabel = (dir: Axis, i: number) => dir === 'X' ? String(i + 1) : i < LETTERS.length ? LETTERS[i] : `${LETTERS[Math.floor(i / LETTERS.length) - 1]}${LETTERS[i % LETTERS.length]}`
+const labelKey = (axis: Axis) => (axis === 'X' ? 'x' : 'y')
+/** 축 번호 목록 (축 수만큼) */
+export function axisLabels(spec: FrameSpec, axis: Axis): string[] {
+  const n = (axis === 'X' ? spec.xs : spec.ys).length, own = spec.axisLabels?.[labelKey(axis)]
+  return Array.from({ length: n }, (_, i) => own?.[i] || autoLabel(axis, i))
+}
+export const axisLabel = (spec: FrameSpec, axis: Axis, i: number) => spec.axisLabels?.[labelKey(axis)]?.[i] || autoLabel(axis, i)
+/** 축 번호로 쓸 수 있는 글자 — 도면(DXF R12)·계산서 글꼴에 있는 ASCII, 6자 이내 (1, A, 1/2, A1, 2' …) */
+export const LABEL_OK = /^[A-Za-z0-9/'.-]{1,6}$/
+/** 사용자 입력 "1, 2, 3" → 축 수와 같고 겹치지 않으면 목록, 아니면 null */
+export function parseLabels(text: string, n: number): string[] | null {
+  const v = text.split(/[,\s，、]+/).filter(Boolean)
+  return v.length === n && v.every((l) => LABEL_OK.test(l)) && new Set(v).size === n ? v : null
+}
+/** 한 방향 번호 바꾸기 (null = 기본으로) */
+export function setAxisLabels(spec: FrameSpec, axis: Axis, list: string[] | null): void {
+  const cur = { x: axisLabels(spec, 'X'), y: axisLabels(spec, 'Y') }
+  cur[labelKey(axis)] = list ?? Array.from({ length: cur[labelKey(axis)].length }, (_, i) => autoLabel(axis, i))
+  const isAuto = (a: Axis) => cur[labelKey(a)].every((l, i) => l === autoLabel(a, i))
+  spec.axisLabels = isAuto('X') && isAuto('Y') ? undefined : cur
+}
+/** 번호 목록 길이 맞추기 — 끝에서 늘리면 기본 번호(겹치면 ' 붙임), 줄이면 끝을 버림 */
+function fitLabels(spec: FrameSpec): void {
+  if (!spec.axisLabels) return
+  for (const axis of ['X', 'Y'] as const) {
+    const n = (axis === 'X' ? spec.xs : spec.ys).length, k = labelKey(axis)
+    const list = spec.axisLabels[k].slice(0, n)
+    for (let i = list.length; i < n; i++) { let l = autoLabel(axis, i); while (list.includes(l)) l += "'"; list.push(l) }
+    spec.axisLabels[k] = list
+  }
+}
+/** 격자선 at 에 새 축 번호 — 앞 축 번호 p 뒤의 부분 축선 식 1/p, 2/p … (GB/T 50001 附加轴线) */
+function insertLabel(spec: FrameSpec, axis: Axis, at: number): void {
+  if (!spec.axisLabels) return
+  const list = spec.axisLabels[labelKey(axis)], prev = list[at - 1] ?? '0'
+  let k = 1, l = `${k}/${prev}`
+  while (list.includes(l)) l = `${++k}/${prev}`
+  list.splice(at, 0, LABEL_OK.test(l) ? l : `${prev}'`)
+}
+
 /** 스팬 길이·개수 변경 (끝에서 늘리고 줄임) — 패널·가새는 번호로 유지 (범위 밖은 버림) */
 export function setGrid(spec: FrameSpec, xs: number[], ys: number[]): void {
   const bays = braceBays(spec)
   spec.xs = xs; spec.ys = ys
+  fitLabels(spec)
   spec.removed = spec.removed.filter(([i, j]) => i < xs.length - 1 && j < ys.length - 1)
   spec.cuts = (spec.cuts ?? []).filter(([i, j]) => i < xs.length - 1 && j < ys.length - 1)
   spec.braces = baysToBraces(spec, bays)
@@ -176,6 +221,7 @@ export function insertSpan(spec: FrameSpec, axis: Axis, at: number, len: number)
   const sp = spansOf(axis === 'X' ? spec.xs : spec.ys); sp.splice(at, 0, len)
   const co = coordsOf(sp, (axis === 'X' ? spec.xs : spec.ys)[0])
   if (axis === 'X') spec.xs = co; else spec.ys = co
+  insertLabel(spec, axis, at + 1) // 새 격자선은 at+1
   /* 가새: 스팬 방향 번호는 밀고, 직교 격자선 번호(새 격자선이 at+1 에 생김)도 민다 */
   spec.braces = baysToBraces(spec, bays.map((b) => {
     if (axis === 'X') return b.axis === 'X' ? { ...b, i: shift(b.i) } : { ...b, i: b.i > at ? b.i + 1 : b.i }
@@ -195,6 +241,7 @@ export function deleteSpan(spec: FrameSpec, axis: Axis, at: number): void {
   const sp = spansOf(arr); sp.splice(at, 1)
   const co = coordsOf(sp, arr[0])
   if (axis === 'X') spec.xs = co; else spec.ys = co
+  spec.axisLabels?.[labelKey(axis)].splice(at + 1, 1) // 격자선 at+1 이 사라짐
   /* 격자선 at+1 이 사라짐: 스팬 방향 베이 at 은 버리고, 그 격자선 위 직교 가새도 버림 */
   spec.braces = baysToBraces(spec, bays.flatMap((b) => {
     if (axis === 'X') { if (b.axis === 'X') return b.i === at ? [] : [{ ...b, i: pull(b.i) }]; return b.i === at + 1 ? [] : [{ ...b, i: b.i > at + 1 ? b.i - 1 : b.i }] }

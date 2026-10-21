@@ -941,6 +941,8 @@ td.pos{color:var(--green)} td.neg{color:var(--red)}
 .cad-ax.picked line,.cad-ax.picked circle{stroke:var(--blue)}
 .cad-ax line.cad-hit{stroke:transparent;stroke-dasharray:none;cursor:pointer;pointer-events:stroke}
 .cad-ax.part line.cad-hit:hover,.cad-ax.picked line.cad-hit:hover{stroke:color-mix(in srgb,var(--blue) 25%,transparent)}
+.cad-off{fill:color-mix(in srgb,var(--red) 18%,transparent);stroke:none}
+.cad-col{fill:var(--txt-2);opacity:.75}
 .cad-help{margin-top:8px;font-size:.72rem;color:var(--txt-2)}.cad-help summary{cursor:pointer;color:var(--cyan)}.cad-help ul{margin:6px 0 0 16px;line-height:1.7}
 
 .fr-new{margin-top:6px}.fr-new strong{font-size:1rem}.fr-example{margin-top:10px;align-self:flex-start;display:inline-flex;gap:6px;align-items:center}

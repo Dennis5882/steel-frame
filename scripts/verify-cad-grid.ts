@@ -6,7 +6,9 @@
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { readDxf } from '../src/frame/cad/dxfRead'
-import { applyAxisGrid, autoLabel, axisRegions, extractAxisGrid, regionPad } from '../src/frame/cad/axisGrid'
+import { applyAxisGrid, autoLabel, axisRegions, extractAxisGrid, extractColumns, extractWalls, regionPad, suggestShape } from '../src/frame/cad/axisGrid'
+import { axisLabel, axisLabels, deleteSpan, insertSpan, parseLabels, setAxisLabels, setGrid } from '../src/frame/plan'
+import { buildFrameDrawingSvgs } from '../src/frame/drawings'
 import { TUTORIAL_SPEC } from '../src/frame/tutorial'
 import { buildFrame } from '../src/frame/geometry'
 
@@ -119,6 +121,62 @@ const XM = XS.map((v) => v / 1000), YM = YS.map((v) => v / 1000)
 /* 7) 자동 번호 — I·O 제외 (GB/T 50001) */
 same(Array.from({ length: 10 }, (_, i) => autoLabel('Y', i)) as any, ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K'], 'auto labels skip I')
 ok(autoLabel('Y', 13) === 'P' && autoLabel('X', 0) === '1', 'auto labels skip O; X axes are numbers')
+
+/* 9) 기둥 위치 → 뺀 패널 제안 (4 × 3 축선 = 3 × 2 패널, 기둥 600 각 LINE 4개) */
+{
+  const GX = [0, 6000, 12000, 18000], GY = [0, 6000, 12000]
+  const col = (x: number, y: number, layer = 'COLUMN'): E[] => { const h = 300; return [['LINE', layer, x - h, y - h, x + h, y - h], ['LINE', layer, x + h, y - h, x + h, y + h], ['LINE', layer, x + h, y + h, x - h, y + h], ['LINE', layer, x - h, y + h, x - h, y - h]] }
+  const run = (skip: [number, number][], more: E[] = [], pickPartial = false) => {
+    const e = [...grid(GX, GY), ...more]
+    for (const x of GX) for (const y of GY) if (!skip.some(([a, b]) => a === x && b === y)) e.push(...col(x, y))
+    const d = readDxf(bytes(dxf(e, [['$INSUNITS', 70, 4]])))
+    const g = extractAxisGrid(d), extra = pickPartial ? g.axes.filter((a) => !a.main) : []
+    return { g, extra, s: suggestShape(g, extra, extractColumns(d, g), extractWalls(d, g)), d }
+  }
+  const key = (r?: [number, number][]) => JSON.stringify(r)
+  ok(key(run([]).s?.removed) === '[]', 'shape: every node has a column -> nothing removed')
+  ok(key(run([[18000, 12000]]).s?.removed) === '[[2,1]]', `shape: L plan, one outer corner column missing -> that panel out (${key(run([[18000, 12000]]).s?.removed)})`)
+  ok(key(run([[12000, 12000], [18000, 12000]]).s?.removed) === '[[1,1],[2,1]]', 'shape: L plan, two panels cut away')
+  const dr = run([[6000, 6000]]).s
+  ok(key(dr?.removed) === '[]' && dr?.dropped === 1, 'shape: one inner column missing with support all around -> kept (long-span beam)')
+  ok(key(run([[18000, 12000]], [['LINE', 'WALL', 15000, 12000, 21000, 12000]]).s?.removed) === '[]', 'shape: a wall through the node counts as support')
+  ok(key(run([[18000, 12000]], [['CIRCLE', 'COLUMN', 18000, 12000, 300]]).s?.removed) === '[]', 'shape: a round column (circle) counts')
+  ok(key(run([[18000, 12000]], col(18000, 12000, '柱钢筋')).s?.removed) === '[[2,1]]', 'shape: rebar layer (柱钢筋) is not a column')
+  /* 부분 축선 X=9000 이 아래 칸(0~6000)에만 그려짐 — 위쪽 교점(9000, 12000)은 가상 교점이라 세지 않는다 */
+  const pv = run([], [['LINE', 'DOTE', 9000, -300, 9000, 6300], ...col(9000, 0), ...col(9000, 6000)], true)
+  ok(pv.extra.length === 1 && key(pv.s?.removed) === '[]', `shape: partial axis nodes outside its drawn length are not counted (${key(pv.s?.removed)})`)
+  const spec = applyAxisGrid(TUTORIAL_SPEC, pv.g, pv.extra, pv.s)
+  same(spec.axisLabels?.x ?? [], ['1', '2', '1/2', '3', '4'], 'apply: partial axis number kept in the spec')
+  ok(!spec.axisLabels || spec.axisLabels.y.join() === 'A,B,C', 'apply: Y numbers from the drawing')
+  const lo = run([[18000, 12000]])
+  ok(key(applyAxisGrid(TUTORIAL_SPEC, lo.g, [], lo.s).removed) === '[[2,1]]' && applyAxisGrid(TUTORIAL_SPEC, lo.g, [], lo.s).axisLabels === undefined, 'apply: suggested panels go in; default numbers are not stored')
+  const none = (() => { const d = readDxf(bytes(dxf(grid(GX, GY), [['$INSUNITS', 70, 4]]))); const g = extractAxisGrid(d); return suggestShape(g, [], extractColumns(d, g)) })()
+  ok(none === null, 'shape: no column layer -> no suggestion')
+}
+/* 10) 축 번호 (plan.ts) — 기본·입력·스팬 편집·입력 변경 판정·도면 */
+{
+  const s = structuredClone(TUTORIAL_SPEC) as typeof TUTORIAL_SPEC
+  ok(axisLabel(s, 'Y', 8) === 'J' && axisLabel(s, 'X', 0) === '1', 'labels: default skips I')
+  ok(parseLabels('1, 2, 3', 3)?.join() === '1,2,3' && !parseLabels('1, 1, 3', 3) && !parseLabels('1, 2', 3) && !parseLabels('1, 2, 轴', 3), 'labels: input must be n different ASCII labels')
+  const nx = s.xs.length
+  setAxisLabels(s, 'X', Array.from({ length: nx }, (_, i) => `X${i + 1}`))
+  ok(s.axisLabels?.x[0] === 'X1' && s.axisLabels?.y[0] === 'A', 'labels: set one direction, the other keeps defaults')
+  insertSpan(s, 'X', 0, 3)
+  ok(axisLabels(s, 'X').join() === ['X1', '1/X1', ...Array.from({ length: nx - 1 }, (_, i) => `X${i + 2}`)].join(), `labels: inserted axis is numbered 1/previous (${axisLabels(s, 'X')})`)
+  deleteSpan(s, 'X', 0)
+  ok(axisLabels(s, 'X').join() === Array.from({ length: nx }, (_, i) => `X${i + 1}`).join(), 'labels: deleting the span removes that axis number')
+  setGrid(s, [...s.xs, s.xs.at(-1)! + 6], s.ys)
+  ok(axisLabels(s, 'X').at(-1) === String(nx + 1) && axisLabels(s, 'X').length === nx + 1, 'labels: a span added at the end gets the default number')
+  setAxisLabels(s, 'X', null)
+  ok(s.axisLabels === undefined, 'labels: back to defaults -> not stored')
+  const built = structuredClone(TUTORIAL_SPEC) as typeof TUTORIAL_SPEC, draft = structuredClone(TUTORIAL_SPEC) as typeof TUTORIAL_SPEC
+  setAxisLabels(draft, 'Y', axisLabels(draft, 'Y').map((l) => `G${l}`))
+  ;(globalThis as any).document ??= { documentElement: { lang: 'en', dataset: {} } }; (globalThis as any).localStorage ??= { getItem: () => null, setItem: () => {}, removeItem: () => {} }
+  const { frameStale } = await import('../src/frame/state') // store·i18n 을 불러오므로 문서 흉내 뒤에
+  ok(!frameStale({ draft, built: { spec: built } as any }), 'labels: renaming axes is not an input change (no rebuild)')
+  const sheets = buildFrameDrawingSvgs({ spec: draft, model: buildFrame(draft), title: 'T', date: 'd', version: 'v' })
+  ok(sheets[0].svg.includes('>GA<') && sheets.some((x) => /ELEVATION GRID G/.test(x.name)), 'labels: drawings use the axis numbers')
+}
 
 /* 8) 로컬 샘플 (있을 때만) */
 const SAMPLE = 'samples/cad/zg test2.dxf'

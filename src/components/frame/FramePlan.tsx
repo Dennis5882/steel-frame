@@ -4,11 +4,11 @@
    mode 'edges': 보가 있는 변을 눌러 가새 베이 넣기/빼기
    치수 숫자를 누르면 onSpan 으로 그 스팬을 고른다 (길이 수정·삽입·삭제는 부모가 처리) */
 import { useRef, useState, type PointerEvent, type ReactElement } from 'react'
-import { CORNER_OFF, braceBays, diagonalOf, edgeExists, keptCorners, panelState, triNext, type Corner, type PanelState } from '../../frame/plan'
+import { CORNER_OFF, axisLabel, braceBays, diagonalOf, edgeExists, keptCorners, panelState, triNext, type Corner, type PanelState } from '../../frame/plan'
 import type { Axis, FrameSpec } from '../../frame/types'
 
-export const gridLabelX = (i: number) => String(i + 1)
-export const gridLabelY = (j: number) => String.fromCharCode(65 + j)
+const gridLabelX = (spec: FrameSpec, i: number) => axisLabel(spec, 'X', i)
+const gridLabelY = (spec: FrameSpec, j: number) => axisLabel(spec, 'Y', j)
 
 interface Props {
   spec: FrameSpec
@@ -90,7 +90,7 @@ export function FramePlan({ spec, mode = 'view', tool = 'cell', disabled, select
       <path d={`M${x1} ${y1} L${x2} ${y2}`} className={`fr-edge${on ? ' braced' : ''}${hv ? ' hover' : ''}`} />
       {(on || hv) && <path d={chevron(axis, x1, y1, x2, y2)} className={`fr-chev${on ? '' : ' ghost'}`} />}
       {mode === 'edges' && live && <path d={`M${x1} ${y1} L${x2} ${y2}`} className="fr-hit" onPointerEnter={() => setHover(key)} onPointerLeave={() => setHover(null)}
-        onClick={() => onEdge?.(axis, i, j)}><title>{axis === 'X' ? `${gridLabelY(j)} · ${gridLabelX(i)}–${gridLabelX(i + 1)}` : `${gridLabelX(i)} · ${gridLabelY(j)}–${gridLabelY(j + 1)}`}</title></path>}
+        onClick={() => onEdge?.(axis, i, j)}><title>{axis === 'X' ? `${gridLabelY(spec, j)} · ${gridLabelX(spec, i)}–${gridLabelX(spec, i + 1)}` : `${gridLabelX(spec, i)} · ${gridLabelY(spec, j)}–${gridLabelY(spec, j + 1)}`}</title></path>}
     </g>)
   }
 
@@ -108,9 +108,9 @@ export function FramePlan({ spec, mode = 'view', tool = 'cell', disabled, select
       {cells}
       {edges}
       {xs.map((x, i) => <g key={`x${i}`} className="fr-axis"><path d={`M${X(x)} ${Y(ys.at(-1)!) - 10} V${Y(ys[0]) + 10}`} />
-        <circle cx={X(x)} cy={Y(ys[0]) + 22} r="8" /><text x={X(x)} y={Y(ys[0]) + 25.5} textAnchor="middle">{gridLabelX(i)}</text></g>)}
+        <circle cx={X(x)} cy={Y(ys[0]) + 22} r="8" /><text x={X(x)} y={Y(ys[0]) + 25.5} textAnchor="middle">{gridLabelX(spec, i)}</text></g>)}
       {ys.map((y, j) => <g key={`y${j}`} className="fr-axis"><path d={`M${X(xs[0]) - 10} ${Y(y)} H${X(xs.at(-1)!) + 10}`} />
-        <circle cx={X(xs[0]) - 22} cy={Y(y)} r="8" /><text x={X(xs[0]) - 22} y={Y(y) + 3.5} textAnchor="middle">{gridLabelY(j)}</text></g>)}
+        <circle cx={X(xs[0]) - 22} cy={Y(y)} r="8" /><text x={X(xs[0]) - 22} y={Y(y) + 3.5} textAnchor="middle">{gridLabelY(spec, j)}</text></g>)}
       {xs.slice(1).map((x, i) => dim('X', i, (X(xs[i]) + X(x)) / 2, Y(ys.at(-1)!) - 16, x - xs[i], 'middle'))}
       {ys.slice(1).map((y, j) => dim('Y', j, X(xs.at(-1)!) + 16, (Y(ys[j]) + Y(y)) / 2 + 3, y - ys[j], 'start'))}
     </svg>

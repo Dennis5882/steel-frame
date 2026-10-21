@@ -39,8 +39,8 @@ export function captureShots(spec: FrameSpec, model: FrameModel, design: FrameDe
     const on = (id: number) => { const n = nodes.get(id)!; return near(ln.axis === 'X' ? n.y : n.x, ln.line) }
     const els = model.elements.filter((e) => on(e.n1) && on(e.n2) && (e.role === 'column' || e.axis === ln.axis))
     if (!els.length) continue
-    const label = ln.axis === 'X' ? gridY(spec.ys.findIndex((y) => near(y, ln.line))) : gridX(spec.xs.findIndex((x) => near(x, ln.line)))
-    shots.push({ key: `elev_${ln.axis}${label}`, section: 'model', caption: ['rp_gen_elev', label], capture: { SET_MODE: 'pre', SET_HIDDEN: false,
+    const label = ln.axis === 'X' ? gridY(spec, spec.ys.findIndex((y) => near(y, ln.line))) : gridX(spec, spec.xs.findIndex((x) => near(x, ln.line)))
+    shots.push({ key: `elev_${ln.axis}${label.replace(/[^A-Za-z0-9]/g, '_')}`, section: 'model', caption: ['rp_gen_elev', label], capture: { SET_MODE: 'pre', SET_HIDDEN: false,
       ANGLE: ln.axis === 'X' ? { HORIZONTAL: 0, VERTICAL: 0 } : { HORIZONTAL: 90, VERTICAL: 0 },
       ACTIVE: { ACTIVE_MODE: 'Active', E_LIST: els.map((e) => e.id), N_LIST: [...new Set(els.flatMap((e) => [e.n1, e.n2]))] } } })
   }

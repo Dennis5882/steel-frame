@@ -1,5 +1,7 @@
 /* 다층 강골조 화면 문구 (components/frame/*, actions/frame.ts). en 이 키 기준, 나머지는 typeof frameEn 으로 누락 검출. zh-CN 은 대륙 용어 */
 export const frameEn = {
+  fr_axis_labels: 'Axis numbers', fr_axis_labels_reset: 'Default', fr_axis_labels_bad: (n: number) => `Enter ${n} different numbers (letters, digits, / ' . - up to 6 characters each).`,
+  fr_axis_labels_hint: 'Used on the plan, drawings, report and 3D view. Default: 1, 2, 3 … across and A, B, C … up (I, O and Z are not used, GB/T 50001). Changing them does not change the Gen NX model.',
  fs_grid: 'Grid', fs_stories: 'Storeys', fs_sections: 'Material & sections', fs_braces: 'Bracing', fs_loads: 'Floor loads', fs_lateral: 'Wind & seismic', fs_review: 'Final check',
   fr_code_label: 'GB 50017-2017 · GB/T 50011-2010 (2024)', fr_code_note: 'Mandatory codes GB 55001-2021 (structural basis, loads and combinations), GB 55002-2021 (seismic) and GB 55006-2021 (steel) take precedence. Members follow GB 50017-2017 (2019 errata), seismic GB/T 50011-2010 (2024 edition), loads GB 50009-2012.',
   fr_start_title: 'Multi-storey steel frame', fr_start_hint: 'Start a new frame, shape the plan and place braces by clicking, set storeys, sections and loads, then create the Gen NX model.',
@@ -76,6 +78,8 @@ export const frameEn = {
 type FrameDict = typeof frameEn
 
 export const frameKo: FrameDict = {
+  fr_axis_labels: '축 번호', fr_axis_labels_reset: '기본', fr_axis_labels_bad: (n) => `서로 다른 번호 ${n}개를 입력하세요 (영문·숫자·/ ' . - 6자 이내).`,
+  fr_axis_labels_hint: '평면·도면·계산서·3D 에 쓰입니다. 기본은 가로로 1, 2, 3 …, 세로로 A, B, C … 입니다 (I·O·Z 는 쓰지 않음, GB/T 50001). 바꿔도 Gen NX 모델은 바뀌지 않습니다.',
  fs_grid: '격자', fs_stories: '층', fs_sections: '재료·단면', fs_braces: '가새 배치', fs_loads: '바닥 하중', fs_lateral: '풍·지진', fs_review: '최종 확인',
   fr_code_label: 'GB 50017-2017 · GB/T 50011-2010 (2024年版)', fr_code_note: '강제규범 GB 55001-2021(구조 기본·하중·조합), GB 55002-2021(내진), GB 55006-2021(강구조)이 우선합니다. 부재는 GB 50017-2017(2019 감오), 내진은 GB/T 50011-2010(2024年版), 하중은 GB 50009-2012를 따릅니다.',
   fr_start_title: '다층 강골조', fr_start_hint: '새 프레임을 만들고 평면 형상과 가새를 클릭으로 정한 뒤, 층·단면·하중을 설정해 Gen NX 모델을 생성합니다.',
@@ -150,6 +154,8 @@ export const frameKo: FrameDict = {
 }
 
 export const frameZhCN: FrameDict = {
+  fr_axis_labels: '轴号', fr_axis_labels_reset: '默认', fr_axis_labels_bad: (n) => `请输入 ${n} 个互不相同的轴号（字母、数字、/ ' . -，每个最多 6 个字符）。`,
+  fr_axis_labels_hint: '用于平面、图纸、计算书和三维视图。默认横向 1、2、3 …，纵向 A、B、C …（不用 I、O、Z，GB/T 50001）。修改轴号不会改变 Gen NX 模型。',
  fs_grid: '轴网', fs_stories: '楼层', fs_sections: '材料与截面', fs_braces: '支撑布置', fs_loads: '楼面荷载', fs_lateral: '风与地震', fs_review: '最终确认',
   fr_code_label: 'GB 50017-2017 · GB/T 50011-2010（2024年版）', fr_code_note: '强制性规范 GB 55001-2021（结构通用、荷载与组合）、GB 55002-2021（抗震）、GB 55006-2021（钢结构）优先适用。构件验算依据 GB 50017-2017（2019 局部修订），抗震依据 GB/T 50011-2010（2024 年版），荷载依据 GB 50009-2012。',
   fr_start_title: '多层钢框架', fr_start_hint: '新建框架，在平面中点击确定形状与支撑，设置楼层、截面和荷载，然后创建 Gen NX 模型。',
@@ -224,6 +230,8 @@ export const frameZhCN: FrameDict = {
 }
 
 export const frameZhTW: FrameDict = {
+  fr_axis_labels: '軸號', fr_axis_labels_reset: '預設', fr_axis_labels_bad: (n) => `請輸入 ${n} 個互不相同的軸號（字母、數字、/ ' . -，每個最多 6 個字元）。`,
+  fr_axis_labels_hint: '用於平面、圖面、計算書與 3D 視圖。預設橫向 1、2、3 …，縱向 A、B、C …（不用 I、O、Z，GB/T 50001）。修改軸號不會改變 Gen NX 模型。',
  fs_grid: '格線', fs_stories: '樓層', fs_sections: '材料與斷面', fs_braces: '斜撐配置', fs_loads: '樓板載重', fs_lateral: '風與地震', fs_review: '最終確認',
   fr_code_label: 'GB 50017-2017 · GB/T 50011-2010（2024年版）', fr_code_note: '強制性規範 GB 55001-2021（結構通用、載重與組合）、GB 55002-2021（抗震）、GB 55006-2021（鋼結構）優先適用。構件檢核依 GB 50017-2017（2019 局部修訂），抗震依 GB/T 50011-2010（2024 年版），載重依 GB 50009-2012。',
   fr_start_title: '多層鋼構架', fr_start_hint: '新建構架，在平面中點擊決定形狀與斜撐，設定樓層、斷面與載重，然後建立 Gen NX 模型。',

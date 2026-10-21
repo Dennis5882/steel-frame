@@ -4,6 +4,7 @@
 import { Dxf, toSvgSheets, type SvgLayerStyle } from '../drawing/dxf'
 import { hSection } from './design'
 import { SFI } from './loads'
+import { axisLabel } from './plan'
 import { FRAME_MARK, frameQuantities } from './quantities'
 export { FRAME_MARK }
 import type { Axis, FrameModel, FrameRole, FrameSpec } from './types'
@@ -20,8 +21,9 @@ const LAYER_OF: Record<FrameRole, string> = { column: 'COLUMN', beam: 'BEAM', br
 const ROLE_EN: Record<FrameRole, string> = { column: 'Column', beam: 'Beam', brace: 'Brace (inverted V)' }
 const TXT = 250
 
-export const gridX = (i: number) => String(i + 1)
-export const gridY = (j: number) => String.fromCharCode(65 + j)
+/** 축 번호 — 스펙의 axisLabels, 없으면 1, 2, 3 … / A, B, C … (plan.ts axisLabel) */
+export const gridX = (spec: FrameSpec, i: number) => axisLabel(spec, 'X', i)
+export const gridY = (spec: FrameSpec, j: number) => axisLabel(spec, 'Y', j)
 
 export interface FrameDrawingInput { spec: FrameSpec; model: FrameModel; title: string; date: string; version: string; colStrongAxis?: Axis }
 
@@ -62,8 +64,8 @@ function drawFrame({ spec, model, title, date, version, colStrongAxis = 'X' }: F
   {
     const P = (x: number, y: number) => [ox + mm(x - xs[0]), mm(y - ys[0])] as const
     sheet(Lx, Ly + 3000, 'S1  TYPICAL FLOOR FRAMING PLAN', 7000, 6000)
-    xs.forEach((x, i) => { const [px] = P(x, 0); d.line('GRID', px, -1500, px, Ly + 1500); bubble(px, Ly + 2100, gridX(i)) })
-    ys.forEach((y, j) => { const [, py] = P(0, y); d.line('GRID', ox - 1500, py, ox + Lx + 1500, py); bubble(ox - 2100, py, gridY(j)) })
+    xs.forEach((x, i) => { const [px] = P(x, 0); d.line('GRID', px, -1500, px, Ly + 1500); bubble(px, Ly + 2100, gridX(spec, i)) })
+    ys.forEach((y, j) => { const [, py] = P(0, y); d.line('GRID', ox - 1500, py, ox + Lx + 1500, py); bubble(ox - 2100, py, gridY(spec, j)) })
     /* 보 — 1층 위 레벨(모든 층 같음) */
     for (const e of model.elements) {
       if (e.role !== 'beam') continue
@@ -116,12 +118,12 @@ function drawFrame({ spec, model, title, date, version, colStrongAxis = 'X' }: F
     const on = (n: { x: number; y: number }) => near(ln.axis === 'X' ? n.y : n.x, ln.line)
     const u = (n: { x: number; y: number }) => ln.axis === 'X' ? n.x : n.y
     const P = (n: { x: number; y: number; z: number }) => [ox + mm(u(n) - along[0]), mm(n.z - z0)] as const
-    const label = ln.axis === 'X' ? `GRID ${gridY(ys.findIndex((y) => near(y, ln.line)))}` : `GRID ${gridX(xs.findIndex((x) => near(x, ln.line)))}`
+    const label = ln.axis === 'X' ? `GRID ${gridY(spec, ys.findIndex((y) => near(y, ln.line)))}` : `GRID ${gridX(spec, xs.findIndex((x) => near(x, ln.line)))}`
     sheet(L + 4000, H + 2000, `S${k + 2}  ELEVATION ${label}`, 6000)
     along.forEach((v, i) => {
       const px = ox + mm(v - along[0])
       d.line('GRID', px, -1500, px, H + 1000)
-      bubble(px, -2100, ln.axis === 'X' ? gridX(i) : gridY(i))
+      bubble(px, -2100, ln.axis === 'X' ? gridX(spec, i) : gridY(spec, i))
     })
     model.levels.forEach((z, lv) => {
       const py = mm(z - z0)

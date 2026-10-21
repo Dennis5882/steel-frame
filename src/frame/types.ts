@@ -58,6 +58,9 @@ export interface FrameSpec {
   storyNames: string[]
   /** 평면에서 뺀 패널 [i, j] (모든 층) — i = X 스팬 번호, j = Y 스팬 번호 (0부터). 형상 편집: src/frame/plan.ts */
   removed: [number, number][]
+  /** 축 번호 (x = xs 의 세로축, y = ys 의 가로축, 길이 = 축 수). 없으면 1, 2, 3 … / A, B, C … (plan.ts axisLabel).
+      DXF 가져오기가 도면의 번호를 넣고, 축망 단계에서 고칠 수 있다. 표시용이라 Gen 모델·입력 변경 판정과 무관하다 */
+  axisLabels?: { x: string[]; y: string[] }
   /** 삼각형으로 자른 패널 [i, j, 잘라낸 모서리] — 0 좌하 · 1 우하 · 2 우상 · 3 좌상. 대각선에 보가 생기고 남은 삼각형이 바닥 */
   cuts?: [number, number, 0 | 1 | 2 | 3][]
   material: 'Q235B' | 'Q355B'

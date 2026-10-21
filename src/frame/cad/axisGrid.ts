@@ -4,6 +4,7 @@
    순서: 범위(box) → 단위(mm/cm/m, $INSUNITS 또는 축 간격으로 추정) → 축척(drawingScale, 2× 출도) → 축 레이어 → 회전 → 축선 묶기 → 주축/부분 → 번호.
    결과는 스펙의 xs·ys (m, 첫 주축 = 0). 부분 축선(평면 일부만 지나는 附加轴线)은 기본으로 빼고 사용자가 고른다. */
 import type { FrameSpec } from '../types'
+import { LABEL_OK, autoLabel } from '../plan'
 import type { CadDrawing, CadEntity, Pt } from './dxfRead'
 import { analyzeDrawingScale, type ScaleAnalysis, type ScaleBox } from './drawingScale'
 
@@ -39,6 +40,10 @@ export interface GridImport {
   /** 축망 회전 (도, 반시계) — 0 이 아니면 풀어서 읽었다 */
   rotationDeg: number
   axes: AxisLine[]
+  /** 축망 좌표로 바꾸기 (도면 단위 → 회전을 푼 mm) — 기둥 읽기(extractColumns)가 같은 변환을 쓴다 */
+  toGrid(p: Pt): Pt
+  /** 이 축망을 읽은 범위 (도면 단위, 여유 포함) */
+  area?: ScaleBox
   /** 주축만 — 스펙 좌표 (m, 첫 주축 = 0) */
   xs: number[]; ys: number[]
   skippedDiagonal: number
@@ -107,8 +112,8 @@ function cluster(segs: { pos: number; a: number; b: number }[], tol: number): Cl
 }
 
 /** 축 번호 기본값 — 세로축 1, 2, 3 … (좌→우), 가로축 A, B, C … (아래→위, I·O·Z 제외: GB/T 50001 7.0.4) */
-const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXY'.split('')
-export const autoLabel = (dir: 'X' | 'Y', i: number) => dir === 'X' ? String(i + 1) : i < LETTERS.length ? LETTERS[i] : `${LETTERS[Math.floor(i / LETTERS.length) - 1]}${LETTERS[i % LETTERS.length]}`
+/** 기본 축 번호는 plan.ts autoLabel (스펙·도면과 같은 규칙) */
+export { autoLabel }
 /** 축 번호로 볼 글자: 1, 12, A, AB, A1, 1/2, 1/A, X1 … */
 const LABEL_TEXT = /^(?:\d{1,3}|[A-Z]{1,2}\d{0,2}|\d{1,2}\/[A-Z0-9]{1,3}|[A-Z]\/\d{1,2})$/i
 
@@ -203,7 +208,8 @@ export function extractAxisGrid(d: CadDrawing, o: GridOptions = {}): GridImport 
   const toM = (p: number[]) => p.map((v) => Math.round(v - p[0]) / 1000)
   const xs = toM(mains('X')), ys = toM(mains('Y'))
   if (xs.length < 2 || ys.length < 2) warnings.push('few_axes')
-  return { layers, candidates, unitMm, unitGuessed, scale, mmPerUnit, rotationDeg, axes, xs, ys, skippedDiagonal, warnings: [...new Set(warnings)] }
+  const toGrid = (p: Pt) => { const q = rot(p, rad); return { x: q.x * mmPerUnit, y: q.y * mmPerUnit } }
+  return { layers, candidates, unitMm, unitGuessed, scale, mmPerUnit, rotationDeg, axes, toGrid, area: padded, xs, ys, skippedDiagonal, warnings: [...new Set(warnings)] }
 }
 
 export interface AxisRegion { box: ScaleBox; lines: number }
@@ -228,10 +234,106 @@ export function axisRegions(d: CadDrawing, layers: string[]): AxisRegion[] {
 /** 영역 둘레 여유 — 영역 크기의 25 % (버블·치수 문자가 들어오게) */
 export const regionPad = (r: AxisRegion) => 0.25 * Math.max(r.box.maxX - r.box.minX, r.box.maxY - r.box.minY)
 
-/** 가져온 축망을 스펙에 넣기 — 주축 + 고른 부분 축선. 평면 형상(뺀 패널·삼각)과 가새는 축 번호가 바뀌므로 비운다 */
-export function applyAxisGrid(spec: FrameSpec, g: GridImport, extra: AxisLine[] = []): FrameSpec {
-  const pick = (dir: 'X' | 'Y') => [...g.axes.filter((a) => a.dir === dir && a.main), ...extra.filter((a) => a.dir === dir)].map((a) => a.pos).sort((a, b) => a - b)
-  const px = pick('X'), py = pick('Y'), x0 = px[0] ?? 0, y0 = py[0] ?? 0
-  const m = (p: number[], o: number) => [...new Set(p.map((v) => Math.round(v - o) / 1000))]
-  return { ...spec, xs: m(px, x0), ys: m(py, y0), removed: [], cuts: [], braces: [] }
+/* ── 기둥 위치 → 평면 형상 제안 ──
+   기둥 레이어(COL·COLU·柱 …, 철근·치수 등 제외)의 도형을 끝점이 닿는 선끼리 묶어 기둥 하나로 본다(LINE 4개로 그린 기둥 포함, StruXureAI 2-1).
+   원도 기둥(원형). 벽 레이어(WALL·墙·牆·벽) 선이 지나는 교점도 지지가 있는 것으로 본다(코어가 구멍으로 빠지지 않게).
+   지지가 있어야 할 교점(두 축선이 실제로 지나는 점)이 하나라도 비면 그 패널을 뺀다 — L자 평면의 바깥 모서리 패널은 교점 1곳만 빈다.
+   예외: 내부 교점에서 기둥 하나만 빠지고 둘레 8개 교점에 모두 지지가 있으면 큰 보로 건너는 것으로 보고 남긴다.
+   부분 축선이 만든 교점은 그 축선이 그려진 구간 밖이면 세지 않는다(가상 교점). 사선 변(삼각 패널)은 제안하지 않는다 — 평면에서 직접 정한다 */
+export const COLUMN_LAYER = /COL|柱|기둥/i
+export const COLUMN_NOT = /钢筋|鋼筋|配筋|筋|尺寸|标注|標註|DIM|TEXT|TXT|REIN|REBAR|NUM|编号|編號|HATCH|填充|철근|치수|번호/i
+export const columnLayers = (d: CadDrawing) => d.layers.filter((l) => l.lines > 0 && COLUMN_LAYER.test(l.name) && !COLUMN_NOT.test(l.name)).map((l) => l.name)
+export const WALL_LAYER = /WALL|墙|牆|벽/i
+export const wallLayers = (d: CadDrawing) => d.layers.filter((l) => l.lines > 0 && WALL_LAYER.test(l.name) && !COLUMN_NOT.test(l.name)).map((l) => l.name)
+/** 벽 선분 (축망 좌표 mm) */
+export function extractWalls(d: CadDrawing, g: GridImport, layers = wallLayers(d)): { a: Pt; b: Pt }[] {
+  const inArea = (p: Pt) => !g.area || (p.x >= g.area.minX && p.x <= g.area.maxX && p.y >= g.area.minY && p.y <= g.area.maxY)
+  return d.entities.filter((e): e is Extract<CadEntity, { type: 'LINE' }> => e.type === 'LINE' && layers.includes(e.layer) && inArea(e.a)).slice(0, 20000)
+    .map((l) => ({ a: g.toGrid(l.a), b: g.toGrid(l.b) }))
+}
+const segDist = (p: Pt, s: { a: Pt; b: Pt }) => {
+  const dx = s.b.x - s.a.x, dy = s.b.y - s.a.y, L2 = dx * dx + dy * dy
+  const u = L2 ? Math.max(0, Math.min(1, ((p.x - s.a.x) * dx + (p.y - s.a.y) * dy) / L2)) : 0
+  return Math.hypot(p.x - s.a.x - u * dx, p.y - s.a.y - u * dy)
+}
+
+export interface ColumnShape { x: number; y: number; w: number; h: number }
+/** 기둥 도형 (축망 좌표 mm, 중심·크기). 크기가 기둥답지 않은 묶음(최소변 < 100 mm, 최대변 > 3000 mm)은 버린다 */
+export function extractColumns(d: CadDrawing, g: GridImport, layers = columnLayers(d)): ColumnShape[] {
+  const inArea = (p: Pt) => !g.area || (p.x >= g.area.minX && p.x <= g.area.maxX && p.y >= g.area.minY && p.y <= g.area.maxY)
+  const segs = d.entities.filter((e): e is Extract<CadEntity, { type: 'LINE' }> => e.type === 'LINE' && layers.includes(e.layer) && inArea(e.a)).slice(0, 20000)
+    .map((l) => ({ a: g.toGrid(l.a), b: g.toGrid(l.b) }))
+  const parent = segs.map((_, i) => i)
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])))
+  /* 끝점 격자(5 mm)로 닿는 선 찾기 */
+  const cell = (p: Pt) => `${Math.round(p.x / 5)},${Math.round(p.y / 5)}`
+  const at = new Map<string, number>()
+  segs.forEach((s, i) => { for (const p of [s.a, s.b]) { const k = cell(p), j = at.get(k); if (j === undefined) at.set(k, i); else parent[find(i)] = find(j) } })
+  const box = new Map<number, { minX: number; minY: number; maxX: number; maxY: number }>()
+  segs.forEach((s, i) => {
+    const r = find(i), b = box.get(r) ?? { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
+    box.set(r, { minX: Math.min(b.minX, s.a.x, s.b.x), minY: Math.min(b.minY, s.a.y, s.b.y), maxX: Math.max(b.maxX, s.a.x, s.b.x), maxY: Math.max(b.maxY, s.a.y, s.b.y) })
+  })
+  const out: ColumnShape[] = [...box.values()].map((b) => ({ x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2, w: b.maxX - b.minX, h: b.maxY - b.minY }))
+  for (const c of d.entities) if (c.type === 'CIRCLE' && layers.includes(c.layer) && inArea(c.p)) { const q = g.toGrid(c.p), r = c.r * g.mmPerUnit; out.push({ x: q.x, y: q.y, w: 2 * r, h: 2 * r }) }
+  return out.filter((c) => Math.min(c.w, c.h) >= 100 && Math.max(c.w, c.h) <= 3000)
+}
+
+export interface ShapeSuggestion {
+  /** 뺄 패널 [i, j] (최종 격자 번호) */
+  removed: [number, number][]
+  /** 교점별 [i, j, 지지 있음(기둥·벽), 실제 교점] — 미리보기 */
+  nodes: [number, number, boolean, boolean][]
+  columns: number
+  /** 기둥 하나만 빠진 내부 교점이라 남긴 수 */
+  dropped: number
+}
+/** 최종 격자(주축 + 고른 부분 축선)의 패널 제안. 기둥이 하나도 없거나 모든 패널이 빠지면(인식 실패) null */
+export function suggestShape(g: GridImport, extra: AxisLine[], cols: ColumnShape[], walls: { a: Pt; b: Pt }[] = []): ShapeSuggestion | null {
+  if (!cols.length) return null
+  const lines = (dir: 'X' | 'Y') => dedupe([...g.axes.filter((a) => a.dir === dir && a.main), ...extra.filter((a) => a.dir === dir)])
+  const X = lines('X'), Y = lines('Y')
+  const realOn = (a: AxisLine, v: number) => a.main || (v >= a.from - 500 && v <= a.to + 500)
+  const has = (x: number, y: number) => cols.some((c) => Math.abs(c.x - x) <= c.w / 2 + 300 && Math.abs(c.y - y) <= c.h / 2 + 300)
+    || walls.some((w) => segDist({ x, y }, w) <= 300)
+  const nodes: ShapeSuggestion['nodes'] = []
+  /* ok = 지지가 있거나 가상 교점 */
+  const ok = new Map<string, boolean>()
+  X.forEach((ax, i) => Y.forEach((ay, j) => {
+    const real = realOn(ax, ay.pos) && realOn(ay, ax.pos), h = has(ax.pos, ay.pos)
+    nodes.push([i, j, h, real])
+    ok.set(`${i},${j}`, h || !real)
+  }))
+  const okAt = (i: number, j: number) => ok.get(`${i},${j}`) ?? false
+  /* 내부 교점에서 기둥 하나만 빠짐: 둘레 8 교점이 모두 ok */
+  let dropped = 0
+  const missing = new Set<string>()
+  for (const [k, v] of ok) if (!v) {
+    const [i, j] = k.split(',').map(Number)
+    const inner = i > 0 && j > 0 && i < X.length - 1 && j < Y.length - 1
+    const ring = [[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0]].every(([di, dj]) => okAt(i + di, j + dj))
+    if (inner && ring) dropped++; else missing.add(k)
+  }
+  const removed: [number, number][] = []
+  for (let i = 0; i + 1 < X.length; i++) for (let j = 0; j + 1 < Y.length; j++)
+    if ([[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]].some(([a, b]) => missing.has(`${a},${b}`))) removed.push([i, j])
+  if (removed.length >= (X.length - 1) * (Y.length - 1)) return null // 다 빠지면 기둥 인식 실패로 본다
+  return { removed, nodes, columns: cols.length, dropped }
+}
+/** 같은 위치(1 mm) 축선은 하나 — 위치순 */
+const dedupe = (a: AxisLine[]) => [...a].sort((p, q) => p.pos - q.pos).filter((v, i, arr) => !i || Math.abs(v.pos - arr[i - 1].pos) > 1)
+
+/** 가져온 축망을 스펙에 넣기 — 주축 + 고른 부분 축선, 축 번호(도면 번호, 쓸 수 없거나 겹치면 그 방향은 기본 번호).
+    평면 형상: shape 가 있으면 그 뺀 패널, 없으면 전체. 삼각 패널과 가새는 축 번호가 바뀌므로 비운다 */
+export function applyAxisGrid(spec: FrameSpec, g: GridImport, extra: AxisLine[] = [], shape?: ShapeSuggestion | null): FrameSpec {
+  const X = dedupe([...g.axes.filter((a) => a.dir === 'X' && a.main), ...extra.filter((a) => a.dir === 'X')])
+  const Y = dedupe([...g.axes.filter((a) => a.dir === 'Y' && a.main), ...extra.filter((a) => a.dir === 'Y')])
+  const m = (a: AxisLine[]) => a.map((v) => Math.round(v.pos - (a[0]?.pos ?? 0)) / 1000)
+  const labels = (a: AxisLine[], dir: 'X' | 'Y') => {
+    const l = a.map((v) => v.label)
+    return l.every((v) => LABEL_OK.test(v)) && new Set(l).size === l.length ? l : a.map((_, i) => autoLabel(dir, i))
+  }
+  const lx = labels(X, 'X'), ly = labels(Y, 'Y')
+  const isAuto = lx.every((l, i) => l === autoLabel('X', i)) && ly.every((l, i) => l === autoLabel('Y', i))
+  return { ...spec, xs: m(X), ys: m(Y), removed: shape?.removed ?? [], cuts: [], braces: [], axisLabels: isAuto ? undefined : { x: lx, y: ly } }
 }

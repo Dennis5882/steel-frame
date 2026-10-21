@@ -107,7 +107,7 @@ export function buildFrameReport(input: FrameReportInput): string {
   if (genOf('model').length) { h3(L('rp_gen_model')); for (const g of genOf('model')) parts.push(genFig(g)) }
   h3(L('fr_grid'))
   const spanRow = (axis: 'X' | 'Y') => {
-    const c = axis === 'X' ? spec.xs : spec.ys, lab = axis === 'X' ? gridX : gridY
+    const c = axis === 'X' ? spec.xs : spec.ys, lab = (i: number) => (axis === 'X' ? gridX(spec, i) : gridY(spec, i))
     return [axis, spansOf(c).map((s, i) => `${lab(i)}–${lab(i + 1)} ${f(s, 3)}`).join(' · '), f(c.at(-1)! - c[0], 3)]
   }
   parts.push(table([t('rp_dir'), t('rp_spans'), t('rp_total_m')], [spanRow('X'), spanRow('Y')]))
@@ -128,8 +128,8 @@ export function buildFrameReport(input: FrameReportInput): string {
   else {
     const byLine = new Map<string, string[]>()
     for (const b of bays) {
-      const key = b.axis === 'X' ? `${t('rp_grid')} ${gridY(b.j)} (X)` : `${t('rp_grid')} ${gridX(b.i)} (Y)`
-      const bay = b.axis === 'X' ? `${gridX(b.i)}–${gridX(b.i + 1)}` : `${gridY(b.j)}–${gridY(b.j + 1)}`
+      const key = b.axis === 'X' ? `${t('rp_grid')} ${gridY(spec, b.j)} (X)` : `${t('rp_grid')} ${gridX(spec, b.i)} (Y)`
+      const bay = b.axis === 'X' ? `${gridX(spec, b.i)}–${gridX(spec, b.i + 1)}` : `${gridY(spec, b.j)}–${gridY(spec, b.j + 1)}`
       ;(byLine.get(key) ?? byLine.set(key, []).get(key)!).push(bay)
     }
     parts.push(table([t('rp_frame_line'), t('rp_bays')], [...byLine].map(([k, v]) => [esc(k), esc(v.join(', '))])))
