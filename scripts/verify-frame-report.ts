@@ -23,7 +23,10 @@ import { designMembers, hSection, runFrameDesign } from '../src/frame/design'
 import { overturning, storyReview } from '../src/frame/story'
 import { frameCombos } from '../src/frame/loads'
 import { captureShots, comboName } from '../src/frame/captures'
-import { captureGen } from '../src/frame/run'
+import { FRAME_SYNC_DBS, captureGen, eigenRequest, fetchEigen, frameSyncPayload } from '../src/frame/run'
+import { dbDifferences } from '../src/domain/genSync'
+import { DEFAULT_TIMEOUT_MS, LONG_TIMEOUT_MS, callTimeout, isConnectionError } from '../src/mapi/timeouts'
+import { MidasConnectionError } from 'midas-nx'
 import { buildFrameDrawingSvgs, buildFrameDxf, elevationLines, frameSchedule } from '../src/frame/drawings'
 import { xlsxParts } from '../src/report/xlsx'
 import { OPT_TARGET, candidatesFor, frameWeight, optIter, pickBest, proposeSections, type FrameOptIter } from '../src/frame/optimize'
@@ -327,6 +330,39 @@ for (const lang of ['ko', 'en', 'zh-CN', 'zh-TW'] as const) {
   const reordered = Object.fromEntries(Object.entries(structuredClone(spec)).reverse()) as any
   reordered.sections = Object.fromEntries(Object.entries(spec.sections).reverse())
   ok(!frameStale({ draft: reordered, built }) && frameStale({ draft: { ...spec, heights: spec.heights.map((h, i) => (i ? h : h + 0.3)) }, built }), 'stale: same values in another key order are not a change; a real edit is')
+}
+
+/* 6) Gen 호출 대기 한도·고유치 요청 (midas-nx 2.10.2, gen-api-cautions.md 4·4-1) */
+{
+  const long = ['/doc/anal', '/DOC/ANAL', '/doc/anal/', '/doc/anal?x=1', '/doc/open', '/doc/saveas', '/doc/new', '/view/CAPTURE']
+  ok(long.every((p) => callTimeout(p)?.timeout === LONG_TIMEOUT_MS), 'timeouts: analysis, open, save, new document and capture wait 15 min (case, trailing / and query ignored)')
+  ok(['/post/TABLE', '/db/NODE', 'NODE', 'doc/anal', '/view/RESULTGRAPHIC'].every((p) => callTimeout(p) === undefined) && DEFAULT_TIMEOUT_MS < LONG_TIMEOUT_MS, 'timeouts: other calls keep the short default (doc/anal without / is /db/doc/anal)')
+  const arg = eigenRequest().Argument
+  ok(arg.TABLE_TYPE === 'EIGENVALUEMODE' && Array.isArray(arg.COMPONENTS) && arg.COMPONENTS.includes('Mode') && arg.COMPONENTS.length > 0, 'eigen: request carries COMPONENTS (Gen NX answers Unknown Error without it)')
+  const conn = new MidasConnectionError('POST /post/TABLE failed', { method: 'POST', endpoint: '/post/TABLE' })
+  ok(isConnectionError(conn) && isConnectionError(Object.assign(new Error('x'), { connection: true })) && !isConnectionError(new Error('Unknown Error')) && !isConnectionError(null), 'timeouts: connection errors are told apart from Gen error answers')
+  const evResp = { EV: { SUB_TABLES: [{ 'EIGENVALUE ANALYSIS': { DATA: [['1', '', '', '1.0456']] } }] } }
+  const run = async (fail: (i: number) => unknown) => {
+    let calls = 0
+    const r = await fetchEigen(async () => { const f = fail(calls++); if (f) throw f; return evResp }, () => {})
+    return { calls, r }
+  }
+  const a = await run(() => null), b = await run((i) => (i === 0 ? new Error('Unknown Error') : null)), c = await run(() => conn), d = await run(() => new Error('Unknown Error'))
+  ok(a.calls === 1 && a.r.eigen?.periods[0] === 1.0456 && !a.r.error, 'eigen: one call when Gen answers')
+  ok(b.calls === 2 && b.r.eigen?.periods[0] === 1.0456 && !b.r.error, 'eigen: a Gen error answer is retried once')
+  ok(c.calls === 1 && c.r.eigen === null && !!c.r.error, 'eigen: a timed-out call is not sent again')
+  ok(d.calls === 2 && d.r.eigen === null && d.r.error === 'Unknown Error', 'eigen: two error answers → not available, with the reason')
+  /* Gen 동일성 비교 페이로드 (assertFrameGen, 라이브 scripts/live-sync.ts) */
+  const sp = framePayloads(spec, buildFrame(spec)), sync = frameSyncPayload(sp)
+  ok(Object.keys(sync).every((db) => (FRAME_SYNC_DBS as readonly string[]).includes(db)) && ['NODE', 'ELEM', 'SECT', 'FBLA'].every((db) => db in sync), 'sync: compares the model, sections and floor loads')
+  const matl = Object.values(sync.MATL) as any[], sentMatl = Object.values((sp as any).MATL) as any[]
+  ok(matl.every((m) => m.PARAM.every((p: any) => !('MASS' in p) && p.DEN === 78.5)) && sentMatl[0].PARAM[0].MASS > 0, 'sync: MATL MASS (Gen stores 0) is left out, DEN is still compared; the sent payload keeps MASS')
+  const genSide = structuredClone(sp) as any
+  for (const m of Object.values(genSide.MATL) as any[]) m.PARAM[0].MASS = 0
+  const nid = Object.keys(genSide.NODE)[0]
+  ok(Object.entries(sync).every(([db, rec]) => !dbDifferences(db, rec, genSide[db]).length), 'sync: Gen answer with MASS 0 matches')
+  genSide.NODE[nid] = { ...genSide.NODE[nid], X: genSide.NODE[nid].X + 0.1 }
+  ok(dbDifferences('NODE', sync.NODE, genSide.NODE).some((d) => d.id === nid), 'sync: a node moved in Gen is caught')
 }
 
 console.log(`Frame report/drawings/optimisation: ${checks} checks passed (4 languages PDF + Word, ${elevationLines(spec).length + 2} drawing sheets, OTM, lightest sections)`)

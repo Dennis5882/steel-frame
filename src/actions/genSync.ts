@@ -11,10 +11,10 @@ export class GenChangedError extends Error {
   constructor(readonly diffs: SyncDiff[]) { super(diffs.map(diffText).join('; ')); this.name = 'GenChangedError' }
 }
 
-export async function assertGenSync(): Promise<void> {
-  const sent = S.built?.sent
+/** sent·dbs 기본값 = 공장 앱(S.built.sent, SYNC_DBS). 골조 앱은 F.built.P 와 자기 DB 목록을 넘긴다 (actions/frame.ts) */
+export async function assertGenSync(sent: Record<string, any> | undefined = S.built?.sent, dbList: readonly string[] = SYNC_DBS): Promise<void> {
   if (!sent) return
-  const dbs = SYNC_DBS.filter((db) => sent[db])
+  const dbs = dbList.filter((db) => sent[db])
   stage('st_sync', dbs.length)
   const diffs: SyncDiff[] = []
   const got: Record<string, any> = {}

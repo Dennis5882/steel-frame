@@ -17,6 +17,7 @@ import { mapi } from '../mapi/client'
 import { outputBlocker, outputState, type FrameOutput } from '../frame/state'
 import { captureShots } from '../frame/captures'
 import { captureGen } from '../frame/run'
+import { assertFrameGen } from './frame'
 import type { Request } from '../frame/results'
 import type { GenFigure } from '../frame/report'
 import { folderAccessSupported, folderName, forgetGenFolder, pickGenFolder, readFolderImage } from '../lib/genFolder'
@@ -162,7 +163,7 @@ const genDir = () => S.saveDir.trim().replace(/\\/g, '/').replace(/\/+$/, '') ||
 
 /** 상세 계산서 (Word) — Gen NX 화면 캡처(모델·평면·입면·반력·변위·내력·응력) + Gen 층 결과 표를 기본 계산서에 넣는다.
     캡처 PNG 는 Gen 이 같은 PC 의 저장 폴더에 쓰고, 앱은 사용자가 고른 그 폴더에서 읽는다(File System Access, Chrome·Edge).
-    폴더 고르기는 클릭 직후(사용자 동작 안)에 먼저 한다. Gen 문서가 이 모델이 아니면(절점 수 다름) 캡처하지 않는다 */
+    폴더 고르기는 클릭 직후(사용자 동작 안)에 먼저 한다. Gen 문서가 이 모델이 아니면(assertFrameGen) 캡처하지 않는다 */
 export async function downloadFrameDetailedDocx(): Promise<void> {
   if (!outputReady('detail')) return
   if (!folderAccessSupported()) { addMsg('bot', lt('fr_detail_no_fs'), 'warn'); return }
@@ -172,10 +173,7 @@ export async function downloadFrameDetailedDocx(): Promise<void> {
   if (!beginJob('docx')) return
   const b = F.built!
   try {
-    stage('fr_cap_check', 1)
-    const nodes = await req('GET', '/db/NODE')
-    const n = Object.keys(nodes?.NODE ?? {}).length
-    if (n !== b.model.nodes.length) throw new Error(t('fr_detail_wrong_doc', n, b.model.nodes.length))
+    await assertFrameGen() // Gen 문서가 이 모델이 아니면 캡처하지 않는다
     const shots = captureShots(b.spec, b.model, F.design)
     stage('fr_cap_run', shots.length * 2 + 2)
     const res = await captureGen(req, shots, genDir(), stamp() + '_' + Date.now().toString(36), { fatal: (e) => e instanceof Cancelled })

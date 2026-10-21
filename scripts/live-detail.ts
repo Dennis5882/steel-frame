@@ -7,6 +7,7 @@ import { MidasClient } from 'midas-nx'
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom'
 import { Packer } from 'docx'
 import { readMapiKey } from './mapi-key'
+import { DEFAULT_TIMEOUT_MS, callTimeout } from '../src/mapi/timeouts'
 import { TUTORIAL_SPEC } from '../src/frame/tutorial'
 import { captureGen, expectOk, runRound } from '../src/frame/run'
 import { captureShots } from '../src/frame/captures'
@@ -18,8 +19,9 @@ setLang('ko')
 const { buildFrameReport } = await import('../src/frame/report')
 const { reportDocxDocument } = await import('../src/report/docx')
 
-const client = new MidasClient({ mapiKey: await readMapiKey(), product: 'gen', timeout: 15 * 60 * 1000 })
-const req: Request = (m, p, b) => client.request(m, p, b as any) as Promise<any>
+/* 화면(src/mapi/client.ts)과 같은 대기 한도 — src/mapi/timeouts.ts */
+const client = new MidasClient({ mapiKey: await readMapiKey(), product: 'gen', timeout: DEFAULT_TIMEOUT_MS })
+const req: Request = (m, p, b) => client.request(m, p, b as any, callTimeout(p)) as Promise<any>
 const stamp = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '_')
 expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_backup_${stamp}.mgbx` }), 'backup')
 const r = await runRound(req, TUTORIAL_SPEC, { viewPath: `C:/temp/sf_view_${stamp}.png`, save: async () => expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_frame_${stamp}_detail.mgbx` }), 'save'), log: (m) => console.log(' ', m) })

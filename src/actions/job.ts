@@ -8,6 +8,7 @@ import { ResultValidationError } from '../domain/resultValidation'
 import { QuantityError } from '../domain/quantities'
 import { GenChangedError } from './genSync'
 import { diffText } from '../domain/genSync'
+import { isConnectionError } from '../mapi/timeouts'
 
 export class Cancelled extends Error {
   constructor() { super('cancelled') }
@@ -83,5 +84,7 @@ function failText(e: unknown, failKey: (m: string) => string): string {
   if (e instanceof GenChangedError) return failKey(t('gen_changed', e.diffs.length, e.diffs.slice(0, 5).map((d) => `· ${diffText(d)}`).join('<br>')))
   if (e instanceof ResultValidationError) return failKey(t('results_invalid', [e.table, t(`rv_${e.issue}`), e.where].filter(Boolean).join(' · ')))
   if (e instanceof QuantityError) return failKey(t('q_invalid', e.where))
+  /* 응답 없이 끊김(시간 초과) — Gen 대화상자가 원인일 때가 많고, 닫으면 Gen 이 남은 명령을 뒤늦게 실행한다 */
+  if (isConnectionError(e)) return failKey(e instanceof Error ? e.message : String(e)) + '<br>' + t('gen_no_answer')
   return failKey(e instanceof Error ? e.message : String(e))
 }

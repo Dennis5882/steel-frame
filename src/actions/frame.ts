@@ -7,9 +7,11 @@ import { addMsg, escapeHtml, tab } from '../state/ui'
 import { confirmAction } from '../components/ConfirmDialog'
 import { autoSave, autoSavePath } from './save'
 import { beginJob, checkCancel, endJob, failMsg, setIter, stage } from './job'
+import { assertGenSync } from './genSync'
+import { isConnectionError } from '../mapi/timeouts'
 import { buildFrame } from '../frame/geometry'
 import { framePayloads } from '../frame/gen'
-import { analyze, collectAnalysis, collectForces, COLLECT_CALLS, equilibriumError, expectOk, fitView, runRound, SEND_CALLS, sendFrame, VIEW_CALLS } from '../frame/run'
+import { FRAME_SYNC_DBS, frameSyncPayload, analyze, collectAnalysis, collectForces, COLLECT_CALLS, equilibriumError, expectOk, fitView, runRound, SEND_CALLS, sendFrame, VIEW_CALLS } from '../frame/run'
 import { storyReview } from '../frame/story'
 import { designMembers, memberFails, runFrameDesign } from '../frame/design'
 import type { Request } from '../frame/results'
@@ -18,6 +20,12 @@ import { OPT_MAX_ITER, optIter, optSummary, optimizeLoop, sectionsKey, type Fram
 import type { FrameModel, FrameSpec } from '../frame/types'
 
 const req: Request = (m, p, b) => mapi(m, p, b as Record<string, unknown> | undefined)
+
+/** 해석·검토·최적화·Gen 캡처 첫 단계 — 지금 Gen 문서가 앱이 보낸 모델(F.built.P)과 같은지. 다르면 GenChangedError 로 멈춘다.
+    Gen 에서 직접 고친 경우와, 응답 없이 끊긴 생성·복원을 Gen 이 대화상자를 닫은 뒤 뒤늦게 실행한 경우를 같이 잡는다 */
+export async function assertFrameGen(): Promise<void> {
+  if (F.built) await assertGenSync(frameSyncPayload(F.built.P), FRAME_SYNC_DBS)
+}
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 const viewPng = () => autoSavePath('view').replace(/\.mgbx$/, '.png')
@@ -90,6 +98,7 @@ export async function analyzeFrame(): Promise<void> {
   if (!beginJob('anal')) return
   addMsg('bot', lt('anal_start'))
   try {
+    await assertFrameGen()
     await analyzeCore()
     const A = F.analysis!
     const bad = Object.entries(A.equilibrium).filter(([, e]) => !(equilibriumError(e) < 1e-3))
@@ -113,6 +122,7 @@ export async function designFrame(): Promise<void> {
   if (!beginJob('design')) return
   addMsg('bot', lt('fl_design_start'))
   try {
+    await assertFrameGen()
     await designCore()
     F.ratioView = true
     S.viewNonce++
@@ -142,6 +152,7 @@ export async function optimizeFrame(): Promise<void> {
   addMsg('bot', lt('fr_opt_start'))
   tab('logP')
   try {
+    await assertFrameGen()
     const combos = b.P.combos.map((c) => ({ name: c.name, seismic: c.seismic }))
     const { iters, best, valid, end } = await optimizeLoop({
       start: iterOf(0),
@@ -216,6 +227,8 @@ export async function restoreFrameBackup(): Promise<void> {
     S.viewNonce++
     addMsg('bot', lt('fr_restore_done', escapeHtml(path)))
   } catch (e) {
+    /* 응답 없이 끊겼으면 Gen 이 대화상자를 닫은 뒤 백업을 열 수 있다 → 앱 모델을 믿을 수 없으므로 비운다 */
+    if (isConnectionError(e)) { F.built = null; clearResults(); F.opt = null; S.viewNonce++ }
     addMsg('bot', failMsg(e, (m) => t('restore_fail', m)))
   } finally {
     endJob()

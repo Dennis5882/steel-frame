@@ -542,6 +542,8 @@ export const en = {
   g_help_2: 'Release notes',
   g_help_2_cmd: 'release notes',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_3_8_1: 'Analysis, design checks, optimisation and the detailed report first check that the model open in Gen NX is the one the app sent, and stop with the differences if it was changed.',
+  rn_v1_3_8_2: 'When Gen NX stops answering, the message says a dialog may be open there and to create the model again after closing it. Opening, saving and capturing wait up to 15 minutes like the analysis; a call that got no answer is not sent again.',
   rn_v1_3_7_1: 'Periods and modal mass now come back from Gen NX reliably: the eigenvalue table request names its components, without which Gen NX answers Unknown Error. Gen calls stop waiting after 3 minutes (analysis still gets 15), so a dialog left open in Gen NX no longer stalls each call for 15 minutes. Updated to midas-nx 2.10.2.',
   rn_v1_3_6_1: 'Check results sheet: ratios keep 4 decimals so values just over 1 match their NG grade, storey drift is a number plus the n of 1/n (Excel no longer turns 1/45 into a date), storey notes are included, and a failed sheet export now says why. Zero or missing drift no longer prints 1/Infinity in the report.',
   rn_v1_3_5_1: 'Check results can be exported as Excel (.xlsx) as well as CSV: every member ratio (largest first) and the storey checks on one sheet, in the screen language, with number cells and the same layout as the quantity take-off.',

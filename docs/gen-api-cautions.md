@@ -61,11 +61,16 @@ DELETE /db/MATL/9                            → 재료 9만 삭제
   - `codes/twReview.ts:31`
 - **원인(2026-10-20, midas-nx 2.10.2)**: `COMPONENTS`가 없으면 매번 `Unknown Error`, 있으면 매번 응답한다. 위의 "간헐적"은 이 차이로 보인다.
 - **조치**: 매뉴얼 예제 목록 `COMPONENTS: ["Node","Mode","UX","UY","UZ","RX","RY","RZ"]`를 넣는다(`src/frame/run.ts`). 응답의 `SUB_TABLES`(주기·참여질량)는 그대로 온다(라이브 2026-10-20: T1 1.0456 s, 참여질량 X·Y 100%). 재시도 1회와 실패 시 '확인 불가' 표시는 안전장치로 남긴다. story 앱의 같은 호출에도 넣어야 한다.
+- 더 짧은 목록 `['Mode']`는 표를 주지 않는다(14 B, 라이브 2026-10-21). 전체 목록 응답은 예제(절점 129 × 12모드)에서 121 KB라 줄일 필요가 없다.
+- 해석 뒤에 모델을 PUT하면(절점 하나라도) 해석 결과가 무효가 되어 이 표도 `Unknown Error`다. 회수 중 모델 변경 금지와 같은 이유다.
 
 ## 4-1. midas-nx 2.10.2 (2026-10-20)
 
 - `request()`가 id 없는 `DELETE /db/<NAME>`을 `{ confirm: true }` 없이는 막는다(`DestructiveOperationError`). 앱 `src`에는 그런 호출이 없다. 옛 `scripts/gate/live-gate2~4.ts`의 Assign 본문 DELETE는 이제 실행되지 않는다(의도된 차단).
-- 대기 한도: Gen 모달 대화상자가 뜨면 모든 호출이 응답하지 않는다. 앱(`src/mapi/client.ts`)과 `scripts/live-frame.ts`는 기본 3분, `/doc/anal`만 15분으로 둔다. 공장 앱의 같은 모듈(15분 한 개)에도 반영이 필요하다.
+- 대기 한도: Gen 모달 대화상자가 뜨면 모든 호출이 응답하지 않는다. 한도 규칙은 `src/mapi/timeouts.ts callTimeout()` 하나로 두고 앱(`src/mapi/client.ts`)과 `scripts/live-frame.ts`·`live-detail.ts`가 같이 쓴다. 기본 3분, `/doc/anal`·`/doc/open`·`/doc/saveas`·`/doc/new`·`/view/CAPTURE`는 15분. 응답 없이 끊긴 호출(`MidasConnectionError`)은 다시 보내지 않는다(Gen 대기열에 쌓이기만 한다). 끊긴 PUT·POST는 대화상자를 닫으면 Gen이 뒤늦게 실행하므로, 그 뒤에는 모델을 다시 생성한다.
+- 그래서 해석·설계 검토·최적화·상세 계산서 캡처는 첫 단계에서 Gen 모델을 앱이 보낸 페이로드와 비교하고(`actions/frame.ts assertFrameGen`, 공장 `actions/genSync.ts` 재사용), 다르면 멈춘다. 비교 대상 `run.ts FRAME_SYNC_DBS`(공통 13개 + FBLD·FBLA)이고, Gen이 다시 쓰는 MATL `PARAM.MASS`(보낸 값 → 0)는 뺀다(`frameSyncPayload`). 라이브 `scripts/live-sync.ts`(2026-10-21): 보낸 그대로 차이 0, 절점 이동 검출, 되돌리면 0.
+- 응답 없이 끊긴 실패에는 "대화상자를 닫고 다시 생성" 안내(`gen_no_answer`)를 붙인다(공용 `actions/job.ts` — 공장 앱 실패 문구에도 붙는다). 복원이 끊기면 앱 모델을 비운다.
+- 공장 앱 영향: `assertGenSync(sent, dbs)`에 인자를 추가했고, 기본값이 공장 앱 기존 동작(`S.built.sent`, `SYNC_DBS`)이라 공장 앱 동작은 그대로다. 공장 앱의 같은 모듈(15분 한 개)에도 반영이 필요하다.
 
 ## 5. 재료 `GB50017-17(S)`
 

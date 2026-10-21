@@ -9,6 +9,8 @@ import { designMembers, runFrameDesign, type FrameDesign } from './design'
 import { fetchElementForces, n, reactionSums, rows, table, type ElementForces, type Request } from './results'
 import { parseEigen, storyReview, type StoryItem, type StoryTables } from './story'
 import { CAPTURE_SIZE, captureFile, type CaptureShot } from './captures'
+import { isConnectionError } from '../mapi/timeouts'
+import { SYNC_DBS } from '../domain/genSync'
 import type { FrameModel, FrameSpec } from './types'
 
 export const GEN_OK = 'MIDAS GEN NX command complete'
@@ -19,8 +21,21 @@ export function expectOk(r: any, what: string): void {
 
 const DB_ORDER = ['UNIT', 'MATL', 'SECT', 'NODE', 'ELEM', 'CONS', 'STLD', 'BODF', 'FBLD', 'FBLA', 'BMLD', 'CNLD', 'STOR'] as const
 const DB_AFTER_STOR = ['STYP', 'LTOM', 'EIGV', 'SPFC', 'SPLC', 'LCOM-GEN'] as const
-/** EIGENVALUEMODE 매뉴얼 예제의 COMPONENTS (midas-nx 2.10.2 기본값과 같음) */
-const EIGEN_COMPONENTS = ['Node', 'Mode', 'UX', 'UY', 'UZ', 'RX', 'RY', 'RZ']
+/** EIGENVALUEMODE COMPONENTS — 빼면 Gen NX 가 매번 Unknown Error (gen-api-cautions.md 4). 매뉴얼 예제 목록.
+    raw request() 는 SDK 표 기본값을 넣지 않으므로 이 목록이 꼭 필요하다 (verify-frame-report 가 검사) */
+export const EIGEN_COMPONENTS = ['Node', 'Mode', 'UX', 'UY', 'UZ', 'RX', 'RY', 'RZ']
+/** 주기·참여질량 표 요청 본문 */
+export const eigenRequest = () => ({ Argument: { TABLE_NAME: 'EV', TABLE_TYPE: 'EIGENVALUEMODE', UNIT: { FORCE: 'KN', DIST: 'M' }, COMPONENTS: EIGEN_COMPONENTS } })
+/** Gen 모델 동일성 비교 대상 (actions/frame.ts assertFrameGen) — 공통 목록 + 바닥하중 */
+export const FRAME_SYNC_DBS = [...SYNC_DBS, 'FBLD', 'FBLA'] as const
+/** 비교할 보낸 값 — Gen 이 다시 쓰는 필드는 뺀다. MATL PARAM.MASS: 보낸 7.85 t/m³ 를 Gen 이 0 으로 저장(라이브 2026-10-21, 층 질량은 DEN 으로 맞음) */
+export function frameSyncPayload(P: FramePayloads): Record<string, Record<string, unknown>> {
+  const out: Record<string, Record<string, unknown>> = {}
+  for (const db of FRAME_SYNC_DBS) if ((P as any)[db]) out[db] = (P as any)[db]
+  out.MATL = Object.fromEntries(Object.entries(out.MATL ?? {}).map(([id, m]: [string, any]) =>
+    [id, { ...m, PARAM: (m.PARAM ?? []).map(({ MASS: _mass, ...p }: Record<string, unknown>) => p) }]))
+  return out
+}
 /** 전송 호출 수 (진행 막대) — new + DB + ope/STOR + 읽기 5 */
 export const SEND_CALLS = 1 + DB_ORDER.length + 1 + DB_AFTER_STOR.length + 5
 
@@ -101,19 +116,32 @@ export async function collectAnalysis(req: Request, spec: FrameSpec, model: Fram
   for (const [key, lc] of [['otmX', 'RX(RS)'], ['otmY', 'RY(RS)']] as const) {
     try { story[key] = await table(req, 'OVERTURNING_MOMENT', { loads: [lc] }) } catch (e: any) { missing[key] = e?.message ?? String(e); log(`OVERTURNING_MOMENT ${lc}: ${missing[key]}`) }
   }
-  /* 주기·참여질량 — EIGENVALUEMODE 는 COMPONENTS 가 없으면 Unknown Error (gen-api-cautions.md 4, midas-nx 2.10.2) → 매뉴얼 목록을 넣고 한 번 재시도 */
-  let eigen: StoryTables['eigen'] = null
-  for (let i = 0; i < 2 && !eigen; i++) {
-    try { eigen = parseEigen((await req('POST', '/post/TABLE', { Argument: { TABLE_NAME: 'EV', TABLE_TYPE: 'EIGENVALUEMODE', UNIT: { FORCE: 'KN', DIST: 'M' }, COMPONENTS: EIGEN_COMPONENTS } }))?.EV) }
-    catch (e: any) { missing.eigen = e?.message ?? String(e); log(`EIGENVALUEMODE try ${i + 1}: ${missing.eigen}`) }
-  }
-  if (eigen) delete missing.eigen
-  story.eigen = eigen
+  const ev = await fetchEigen(req, log)
+  if (ev.error) missing.eigen = ev.error
+  story.eigen = ev.eigen
 
   const colIds = model.elements.filter((e) => e.role === 'column').map((e) => e.id)
   let my = 0, mz = 0
   for (const r of rows(await table(req, 'BEAMFORCE', { loads: ['WX(ST)'], keys: colIds }))) { my += Math.abs(n(r['Moment-y'])); mz += Math.abs(n(r['Moment-z'])) }
   return { equilibrium, story: story as unknown as StoryTables, colStrongAxis: my >= mz ? 'X' : 'Y', missing }
+}
+
+/** 주기·참여질량 — COMPONENTS 필수(EIGEN_COMPONENTS). Gen 오류 응답이면 한 번 재시도하고,
+    응답 없이 끊겼으면(시간 초과·연결 실패) 같은 요청이 Gen 대기열에 쌓이기만 하므로 재시도하지 않는다 */
+export async function fetchEigen(req: Request, log: (m: string) => void): Promise<{ eigen: StoryTables['eigen']; error?: string }> {
+  let error: string | undefined
+  for (let i = 0; i < 2; i++) {
+    try {
+      const eigen = parseEigen((await req('POST', '/post/TABLE', eigenRequest()))?.EV)
+      if (eigen) return { eigen }
+      error = 'no EIGENVALUE ANALYSIS table'
+    } catch (e: any) {
+      error = e?.message ?? String(e)
+      log(`EIGENVALUEMODE try ${i + 1}: ${error}`)
+      if (isConnectionError(e)) break
+    }
+  }
+  return { eigen: null, error }
 }
 
 /** 조합별 요소력 (설계 검토 입력) */

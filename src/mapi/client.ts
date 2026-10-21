@@ -1,15 +1,10 @@
 /* MAPI — midas-nx SDK(MidasClient) 래퍼. 브라우저가 로컬 MIDAS Gen 에 직접 호출한다.
    path 가 '/' 로 시작하면 그대로, 아니면 /db/{path}. 호출·실패는 활동 로그에 남긴다. */
-import { MidasAPIError, MidasClient, type JsonObject } from 'midas-nx'
+import { MidasAPIError, MidasClient, MidasConnectionError, type JsonObject } from 'midas-nx'
+import { DEFAULT_TIMEOUT_MS, callTimeout } from './timeouts'
 import { S } from '../state/store'
 import { log } from '../state/ui'
 import { jobCall } from '../actions/job'
-
-/* 대기 한도 (대기만 중단, Gen 작업은 취소되지 않음). Gen 모달 대화상자가 뜨면 모든 호출이 응답하지 않으므로
-   기본은 짧게 두고 수 분 걸리는 해석만 길게 준다 (midas-nx 2.10.2 README). */
-const TIMEOUT_MS = 3 * 60 * 1000
-const LONG_TIMEOUT_MS = 15 * 60 * 1000
-const LONG_CALLS = new Set(['/doc/anal'])
 
 let cached: { key: string; base: string; client: MidasClient } | null = null
 
@@ -17,7 +12,7 @@ export function getClient(): MidasClient {
   const base = S.baseUrl.trim().replace(/\/$/, '')
   const key = S.mapiKey.trim()
   if (!cached || cached.key !== key || cached.base !== base) {
-    cached = { key, base, client: new MidasClient({ mapiKey: key, baseUrl: base, product: 'gen', timeout: TIMEOUT_MS }) }
+    cached = { key, base, client: new MidasClient({ mapiKey: key, baseUrl: base, product: 'gen', timeout: DEFAULT_TIMEOUT_MS }  /* 호출별 한도는 timeouts.ts */) }
   }
   return cached.client
 }
@@ -37,12 +32,12 @@ export async function mapi<T = any>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', p
   jobCall(`${method} ${ep}`) // 취소됐으면 여기서 Cancelled — 보내기 전에 멈춘다
   log(`<span style="color:var(--blue)">${method}</span> ${ep}${note ? ` <span style="color:var(--dim)">· ${note}</span>` : ''}`, 'api')
   try {
-    const opts = LONG_CALLS.has(ep.toLowerCase()) ? { timeout: LONG_TIMEOUT_MS } : undefined
-    return (await getClient().request(method, ep, body as JsonObject | undefined, opts)) as T
+    return (await getClient().request(method, ep, body as JsonObject | undefined, callTimeout(ep))) as T
   } catch (e) {
     const m = apiErrorMessage(e)
     log(`${method} ${ep} — ${m}`, 'err')
-    throw new Error(m)
+    /* 응답 없이 끊긴 호출은 표시를 남긴다 — 호출하는 쪽이 같은 요청을 다시 보내지 않게 (timeouts.ts isConnectionError) */
+    throw Object.assign(new Error(m), { connection: e instanceof MidasConnectionError })
   }
 }
 
