@@ -72,3 +72,25 @@ export function diffText(d: SyncDiff): string {
   if (d.added !== undefined) return `${d.db}: +${d.added} / −${d.removed}`
   return `${d.db} ${d.id ?? ''} ${d.field ?? ''}: ${v(d.expected)} → ${v(d.actual)}`.replace(/\s+/g, ' ')
 }
+
+/** 보낸 페이로드와 Gen 비교 (store 의존 없음) — 화면 assertGenSync 와 라이브 scripts/live-sync.ts 가 같이 쓴다.
+    dbList 중 보낸 것만(값이 있는 DB) GET 한다. ELEM 의 단면·재료 번호 차이에는 이름도 붙인다 */
+export async function compareGen(sent: Record<string, any>, dbList: readonly string[], get: (db: string) => Promise<unknown>): Promise<{ dbs: string[]; diffs: SyncDiff[] }> {
+  const dbs = dbList.filter((db) => isRecord(sent[db]))
+  const diffs: SyncDiff[] = []
+  const got: Record<string, any> = {}
+  for (const db of dbs) {
+    got[db] = await get(db)
+    diffs.push(...dbDifferences(db, sent[db], got[db]))
+  }
+  /* 요소의 단면·재료 번호 → 이름도 함께 ('1 → 2' 만으로는 무엇이 바뀌었는지 모름) */
+  const named = (db: 'SECT' | 'MATL', src: any, id: unknown) => {
+    const n = src?.[String(id)]?.[db === 'SECT' ? 'SECT_NAME' : 'NAME']
+    return n ? `${id} (${n})` : id
+  }
+  for (const d of diffs) if (d.db === 'ELEM' && (d.field === 'SECT' || d.field === 'MATL')) {
+    d.expected = named(d.field, sent[d.field], d.expected)
+    d.actual = named(d.field, got[d.field], d.actual)
+  }
+  return { dbs, diffs }
+}

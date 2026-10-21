@@ -24,7 +24,7 @@ import { overturning, storyReview } from '../src/frame/story'
 import { frameCombos } from '../src/frame/loads'
 import { captureShots, comboName } from '../src/frame/captures'
 import { FRAME_SYNC_DBS, captureGen, eigenRequest, fetchEigen, frameSyncPayload } from '../src/frame/run'
-import { dbDifferences } from '../src/domain/genSync'
+import { compareGen, dbDifferences } from '../src/domain/genSync'
 import { DEFAULT_TIMEOUT_MS, LONG_TIMEOUT_MS, callTimeout, isConnectionError } from '../src/mapi/timeouts'
 import { MidasConnectionError } from 'midas-nx'
 import { buildFrameDrawingSvgs, buildFrameDxf, elevationLines, frameSchedule } from '../src/frame/drawings'
@@ -316,7 +316,7 @@ for (const lang of ['ko', 'en', 'zh-CN', 'zh-TW'] as const) {
 {
   const { outputBlocker, frameStale } = await import('../src/frame/state')
   const built = { spec, model, P } as any
-  const st = (o: Record<string, unknown>) => ({ built, analysis: null, design: null, busy: false, stale: false, connected: true, ...o }) as any
+  const st = (o: Record<string, unknown>) => ({ built, analysis: null, design: null, busy: false, stale: false, connected: true, genChanged: false, ...o }) as any
   const all = ['report', 'detail', 'drawings', 'quantities', 'checks'] as const
   const full = { analysis, design }
   ok(all.every((o) => outputBlocker(st({ ...full, busy: true }), o) === 'busy') && outputBlocker(st({ busy: true })) === 'busy', 'outputs: busy or a confirm dialog blocks the stage and every export')
@@ -326,6 +326,7 @@ for (const lang of ['ko', 'en', 'zh-CN', 'zh-TW'] as const) {
   ok(['report', 'drawings', 'quantities'].every((o) => outputBlocker(st({ connected: false }), o as any) === null) && outputBlocker(st({})) === null, 'outputs: report/drawings/quantities need only the model (no Gen connection)')
   ok(outputBlocker(st({}), 'detail') === 'fr_detail_need_anal' && outputBlocker(st({ analysis }), 'detail') === null, 'outputs: detailed report waits for the analysis')
   ok(outputBlocker(st({ analysis, connected: false }), 'detail') === 'flow_need_connection' && outputBlocker(st({ analysis, connected: false })) === null, 'outputs: detailed report needs the Gen connection (card only, not the stage)')
+  ok(all.every((o) => outputBlocker(st({ ...full, genChanged: true }), o) === 'wf_stale_gen') && outputBlocker(st({ ...full, genChanged: true })) === 'wf_stale_gen', 'outputs: a model changed in Gen blocks the stage and every export')
   ok(outputBlocker(st({ analysis }), 'checks') === 'fr_checks_need_design' && outputBlocker(st(full), 'checks') === null, 'outputs: check results wait for the design checks')
   const reordered = Object.fromEntries(Object.entries(structuredClone(spec)).reverse()) as any
   reordered.sections = Object.fromEntries(Object.entries(spec.sections).reverse())
@@ -334,9 +335,9 @@ for (const lang of ['ko', 'en', 'zh-CN', 'zh-TW'] as const) {
 
 /* 6) Gen 호출 대기 한도·고유치 요청 (midas-nx 2.10.2, gen-api-cautions.md 4·4-1) */
 {
-  const long = ['/doc/anal', '/DOC/ANAL', '/doc/anal/', '/doc/anal?x=1', '/doc/open', '/doc/saveas', '/doc/new', '/view/CAPTURE']
-  ok(long.every((p) => callTimeout(p)?.timeout === LONG_TIMEOUT_MS), 'timeouts: analysis, open, save, new document and capture wait 15 min (case, trailing / and query ignored)')
-  ok(['/post/TABLE', '/db/NODE', 'NODE', 'doc/anal', '/view/RESULTGRAPHIC'].every((p) => callTimeout(p) === undefined) && DEFAULT_TIMEOUT_MS < LONG_TIMEOUT_MS, 'timeouts: other calls keep the short default (doc/anal without / is /db/doc/anal)')
+  const long = ['/doc/anal', '/DOC/ANAL', '/doc/anal/', '/doc/anal?x=1', '/doc/open']
+  ok(long.every((p) => callTimeout(p)?.timeout === LONG_TIMEOUT_MS), 'timeouts: analysis and opening a document wait 15 min (case, trailing / and query ignored)')
+  ok(['/post/TABLE', '/db/NODE', 'NODE', 'doc/anal', '/view/RESULTGRAPHIC', '/doc/saveas', '/doc/new', '/view/CAPTURE'].every((p) => callTimeout(p) === undefined) && DEFAULT_TIMEOUT_MS < LONG_TIMEOUT_MS, 'timeouts: other calls keep the short default: save (first call of build/analysis/restore), new document, capture; doc/anal without / is /db/doc/anal')
   const arg = eigenRequest().Argument
   ok(arg.TABLE_TYPE === 'EIGENVALUEMODE' && Array.isArray(arg.COMPONENTS) && arg.COMPONENTS.includes('Mode') && arg.COMPONENTS.length > 0, 'eigen: request carries COMPONENTS (Gen NX answers Unknown Error without it)')
   const conn = new MidasConnectionError('POST /post/TABLE failed', { method: 'POST', endpoint: '/post/TABLE' })
@@ -363,6 +364,16 @@ for (const lang of ['ko', 'en', 'zh-CN', 'zh-TW'] as const) {
   ok(Object.entries(sync).every(([db, rec]) => !dbDifferences(db, rec, genSide[db]).length), 'sync: Gen answer with MASS 0 matches')
   genSide.NODE[nid] = { ...genSide.NODE[nid], X: genSide.NODE[nid].X + 0.1 }
   ok(dbDifferences('NODE', sync.NODE, genSide.NODE).some((d) => d.id === nid), 'sync: a node moved in Gen is caught')
+  const { MATL: _m, ...noMatl } = sp as any
+  ok(!('MATL' in frameSyncPayload(noMatl)), 'sync: no MATL sent -> MATL not compared (Gen materials are not reported as added)')
+  const genMatl = structuredClone(sp) as any
+  for (const m of Object.values(genMatl.MATL) as any[]) m.PARAM[0].MASS = 0
+  const cmp = await compareGen(frameSyncPayload(sp), FRAME_SYNC_DBS, async (db) => genMatl[db])
+  const elemId = Object.keys(genMatl.ELEM)[0], otherSect = Number(Object.keys(genMatl.SECT).find((k) => Number(k) !== genMatl.ELEM[elemId].SECT))
+  genMatl.ELEM[elemId] = { ...genMatl.ELEM[elemId], SECT: otherSect }
+  const cmp2 = await compareGen(frameSyncPayload(sp), FRAME_SYNC_DBS, async (db) => genMatl[db])
+  const sd = cmp2.diffs.find((d) => d.db === 'ELEM' && d.id === elemId)
+  ok(cmp.diffs.length === 0 && cmp.dbs.includes('FBLA') && !!sd && String(sd.actual).includes('('), 'sync: shared compareGen - same model passes, an element with another section is caught with the section name')
 }
 
 console.log(`Frame report/drawings/optimisation: ${checks} checks passed (4 languages PDF + Word, ${elevationLines(spec).length + 2} drawing sheets, OTM, lightest sections)`)

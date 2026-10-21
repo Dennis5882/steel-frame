@@ -3,6 +3,7 @@ import { repairEn } from './repair'
 import { sectionEn } from './sectionPicker'
 import { frameEn } from './frame'
 import { frameReportEn } from './frameReport'
+import { cadEn } from './cadImport'
 import { flowEn } from './modelingFlow'
 /* 영어 사전 — 키의 기준(폴백). 다른 언어는 `Dict` 타입으로 키 일치를 컴파일 시점에 검사.
    값이 HTML 인 키(…_html, welcome, 메시지류)는 dangerouslySetInnerHTML 로 렌더 — 사용자 입력을 넣지 말 것. */
@@ -13,6 +14,7 @@ export const en = {
   ...flowEn,
   ...frameEn,
   ...frameReportEn,
+  ...cadEn,
   bay_mode: 'Spacing mode',
   numeric_wheel_hint: 'Click to focus, then use the wheel or ↑↓ keys to adjust.',
   bay_error: 'Enter a number greater than zero for every bay spacing.',
@@ -542,6 +544,9 @@ export const en = {
   g_help_2: 'Release notes',
   g_help_2_cmd: 'release notes',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_3_9_1: 'Grid step: import the axes from a DXF plan. Main axes become the spans; partial axes can be added by clicking them. Handles 天正 layers (DOTE/AXIS), rotated grids, plans drawn at 2× size, drawings without units and GBK text; a file with several plans lets you pick one. The file is read in the browser only. DWG is not supported; tips for saving DXF from 天正 and 中望 are shown.',
+  rn_v1_3_9_2: 'When the model in Gen NX no longer matches what the app sent, the outputs stage and every export are blocked and the finished steps are marked to redo, until the model is created again.',
+  rn_v1_3_9_3: 'When Gen NX stops answering, the rest of the job is not sent (the commands would run late once a dialog is closed), the message says a dialog may be open, including when the first save times out. Only analysis and opening a document wait up to 15 minutes; saving and capturing wait 3. A restore that got no answer clears the restore button and shows where the backup is.',
   rn_v1_3_8_1: 'Analysis, design checks, optimisation and the detailed report first check that the model open in Gen NX is the one the app sent, and stop with the differences if it was changed.',
   rn_v1_3_8_2: 'When Gen NX stops answering, the message says a dialog may be open there and to create the model again after closing it. Opening, saving and capturing wait up to 15 minutes like the analysis; a call that got no answer is not sent again.',
   rn_v1_3_7_1: 'Periods and modal mass now come back from Gen NX reliably: the eigenvalue table request names its components, without which Gen NX answers Unknown Error. Gen calls stop waiting after 3 minutes (analysis still gets 15), so a dialog left open in Gen NX no longer stalls each call for 15 minutes. Updated to midas-nx 2.10.2.',

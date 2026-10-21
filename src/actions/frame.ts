@@ -41,6 +41,7 @@ async function sendCore(spec: FrameSpec, model: FrameModel): Promise<void> {
   const file = await autoSave('model')
   clearResults()
   F.built = { spec: clone(spec), model, P, counts, file }
+  S.genChanged = 0 // 새로 보낸 모델 — 이전 Gen 변경 감지는 의미 없음
   S.modelRevision++
 }
 
@@ -199,6 +200,7 @@ async function runState(sections: FrameSections): Promise<void> {
     stage: (k, n) => stage(k, n),
     onSent: (model, P, counts) => {
       F.built = { spec: clone(spec), model, P, counts, file: '' }
+      S.genChanged = 0
       F.draft = clone(spec)
       S.modelRevision++
       S.viewNonce++
@@ -221,6 +223,7 @@ export async function restoreFrameBackup(): Promise<void> {
     await autoSave('model')
     expectOk(await mapi('POST', '/doc/open', { Argument: path }, path), 'doc/open')
     F.built = null
+    S.genChanged = 0
     clearResults()
     F.opt = null
     S.restorePoint = null
@@ -228,8 +231,10 @@ export async function restoreFrameBackup(): Promise<void> {
     addMsg('bot', lt('fr_restore_done', escapeHtml(path)))
   } catch (e) {
     /* 응답 없이 끊겼으면 Gen 이 대화상자를 닫은 뒤 백업을 열 수 있다 → 앱 모델을 믿을 수 없으므로 비운다 */
-    if (isConnectionError(e)) { F.built = null; clearResults(); F.opt = null; S.viewNonce++ }
+    /* 복원 지점도 비운다 — 다시 누르면 doc/open 이 Gen 대기열에 두 번 쌓인다. 백업 경로는 문구로 남긴다 */
+    if (isConnectionError(e)) { F.built = null; clearResults(); F.opt = null; S.restorePoint = null; S.viewNonce++ }
     addMsg('bot', failMsg(e, (m) => t('restore_fail', m)))
+    if (isConnectionError(e)) addMsg('bot', lt('fr_restore_lost', escapeHtml(path)), 'warn')
   } finally {
     endJob()
   }

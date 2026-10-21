@@ -3,6 +3,7 @@ import { repairTW } from './repair'
 import { sectionTw } from './sectionPicker'
 import { frameZhTW } from './frame'
 import { frameReportZhTW } from './frameReport'
+import { cadZhTW } from './cadImport'
 import { flowTW } from './modelingFlow'
 import type { Dict } from './en'
 
@@ -14,6 +15,7 @@ export const zhTW: Dict = {
   ...flowTW,
   ...frameZhTW,
   ...frameReportZhTW,
+  ...cadZhTW,
   bay_mode: '柱距輸入方式',
   numeric_wheel_hint: '點選後可用滾輪或 ↑↓ 鍵調整數值。',
   bay_error: '請為每一跨間距輸入大於零的數值。',
@@ -528,6 +530,9 @@ export const zhTW: Dict = {
   g_help_2: '版本說明',
   g_help_2_cmd: '版本說明',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_3_9_1: '軸網步驟：可從 DXF 平面圖匯入軸網。主軸線作為跨度，附加軸線點選即可加入。支援天正圖層（DOTE/AXIS）、旋轉軸網、依 2 倍尺寸繪製的圖面、未設單位的圖面與 GBK 文字；一個檔案有多張平面時可選擇其一。檔案只在瀏覽器中讀取。不支援 DWG，並說明如何從天正、中望另存為 DXF。',
+  rn_v1_3_9_2: 'Gen NX 中的模型與本程式傳送的不一致時，在重新建立模型之前，成果步驟與所有匯出均被禁止，已完成的步驟標為需重做。',
+  rn_v1_3_9_3: 'Gen NX 無回應時，該作業其餘的指令不再傳送（關閉對話框後會補執行），並提示可能跳出了對話框（包括第一次儲存逾時）。只有分析與開啟檔案最多等待 15 分鐘，儲存與擷取為 3 分鐘。未獲回應的復原會清除復原按鈕並顯示備份位置。',
   rn_v1_3_8_1: '分析、設計檢核、最佳化與詳細計算書會先確認 Gen NX 中開啟的模型與本程式傳送的模型一致，若已修改則列出差異並停止。',
   rn_v1_3_8_2: 'Gen NX 無回應時，提示其中可能跳出了對話框，關閉後請重新建立模型。開啟、儲存檔案與擷取畫面與分析一樣最多等待 15 分鐘；未獲回應的呼叫不再重送。',
   rn_v1_3_7_1: '週期與振態參與質量可直接從 Gen NX 取得：特徵值表請求現在註明分量清單（缺少時 Gen NX 回傳 Unknown Error）。Gen 呼叫等待超過 3 分鐘即停止（分析仍為 15 分鐘），Gen NX 跳出對話框時不再每次呼叫都等待 15 分鐘。升級至 midas-nx 2.10.2。',

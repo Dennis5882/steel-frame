@@ -6,6 +6,7 @@ import { mapi } from '../mapi/client'
 import { S } from '../state/store'
 import { t } from '../i18n'
 import { Cancelled } from './job'
+import { isConnectionError } from '../mapi/timeouts'
 
 /** YYYYMMDD_hhmmss (브라우저 현지 시각) */
 function stamp(): string {
@@ -29,6 +30,7 @@ export async function autoSave(tag: 'backup' | 'model'): Promise<string> {
     return path
   } catch (e) {
     if (e instanceof Cancelled) throw e
-    throw new Error(t('save_failed', path, e instanceof Error ? e.message : String(e)))
+    /* 응답 없이 끊김 표시는 넘긴다 — 실패 문구에 Gen 대화상자 안내가 붙도록 (mapi/timeouts.ts) */
+    throw Object.assign(new Error(t('save_failed', path, e instanceof Error ? e.message : String(e))), { connection: isConnectionError(e) })
   }
 }

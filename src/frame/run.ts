@@ -32,7 +32,7 @@ export const FRAME_SYNC_DBS = [...SYNC_DBS, 'FBLD', 'FBLA'] as const
 export function frameSyncPayload(P: FramePayloads): Record<string, Record<string, unknown>> {
   const out: Record<string, Record<string, unknown>> = {}
   for (const db of FRAME_SYNC_DBS) if ((P as any)[db]) out[db] = (P as any)[db]
-  out.MATL = Object.fromEntries(Object.entries(out.MATL ?? {}).map(([id, m]: [string, any]) =>
+  if (out.MATL) out.MATL = Object.fromEntries(Object.entries(out.MATL).map(([id, m]: [string, any]) =>
     [id, { ...m, PARAM: (m.PARAM ?? []).map(({ MASS: _mass, ...p }: Record<string, unknown>) => p) }]))
   return out
 }

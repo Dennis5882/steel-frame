@@ -89,6 +89,7 @@ export function clearResults(): void {
 }
 export function resetFrame(): void {
   Object.assign(F, freshFrameState())
+  S.genChanged = 0
   S.viewNonce++
   notify()
 }
@@ -120,14 +121,16 @@ const OUTPUT_RULES: Partial<Record<FrameOutput, { gen?: true; need?: ['analysis'
   detail: { gen: true, need: ['analysis', 'fr_detail_need_anal'] }, // Gen NX 화면을 캡처한다
   checks: { need: ['design', 'fr_checks_need_design'] },
 }
-export type OutputState = Pick<FrameState, 'built' | 'analysis' | 'design'> & { busy: boolean; stale: boolean; connected: boolean }
-export type OutputBlock = 'busy' | 'flow_need_model' | 'fr_out_stale' | 'fr_out_trial' | 'flow_need_connection' | 'fr_detail_need_anal' | 'fr_checks_need_design'
-export const outputState = (): OutputState => ({ built: F.built, analysis: F.analysis, design: F.design, busy: S.busy || !!S.confirm, stale: frameStale(F), connected: !!S.mapiKey.trim() })
+/** genChanged = 마지막 Gen 동일성 비교(assertFrameGen)에서 Gen 모델이 보낸 것과 달랐음 — 결과가 이 모델의 것이 아닐 수 있다 */
+export type OutputState = Pick<FrameState, 'built' | 'analysis' | 'design'> & { busy: boolean; stale: boolean; connected: boolean; genChanged: boolean }
+export type OutputBlock = 'busy' | 'flow_need_model' | 'fr_out_stale' | 'fr_out_trial' | 'wf_stale_gen' | 'flow_need_connection' | 'fr_detail_need_anal' | 'fr_checks_need_design'
+export const outputState = (): OutputState => ({ built: F.built, analysis: F.analysis, design: F.design, busy: S.busy || !!S.confirm, stale: frameStale(F), connected: !!S.mapiKey.trim(), genChanged: S.genChanged > 0 })
 export function outputBlocker(f: OutputState, out?: FrameOutput): OutputBlock | null {
   if (f.busy) return 'busy'
   if (!f.built) return 'flow_need_model'
   if (f.built.trial) return 'fr_out_trial'
   if (f.stale) return 'fr_out_stale'
+  if (f.genChanged) return 'wf_stale_gen'
   const r = out && OUTPUT_RULES[out]
   if (r?.gen && !f.connected) return 'flow_need_connection'
   if (r?.need && !f[r.need[0]]) return r.need[1]
@@ -137,6 +140,8 @@ export function outputBlocker(f: OutputState, out?: FrameOutput): OutputBlock | 
 export function frameTaskStatus(task: FrameTask): FrameTaskStatus {
   if (S.job && JOB_TASK[S.job.kind] === task) return 'running'
   if (task !== 'model' && frameStale(F)) return 'stale'
+  /* Gen 에서 모델이 바뀜 — 결과가 있는 단계는 '다시' 표시 (실행은 막지 않는다: 첫 단계에서 다시 비교) */
+  if (S.genChanged && (task === 'analysis' && F.analysis || task === 'design' && F.design || task === 'optimize' && F.opt)) return 'stale'
   if (S.lastFail && JOB_TASK[S.lastFail.kind] === task) return S.lastFail.cancelled ? 'cancelled' : 'failed'
   if (task === 'model') return F.built ? frameStale(F) ? 'stale' : 'done' : 'ready'
   if (task === 'analysis' && F.analysis || task === 'design' && F.design || task === 'optimize' && F.opt) return 'done'

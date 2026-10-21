@@ -3,6 +3,7 @@ import { repairKo } from './repair'
 import { sectionKo } from './sectionPicker'
 import { frameKo } from './frame'
 import { frameReportKo } from './frameReport'
+import { cadKo } from './cadImport'
 import { flowKo } from './modelingFlow'
 import type { Dict } from './en'
 
@@ -13,6 +14,7 @@ export const ko: Dict = {
   ...flowKo,
   ...frameKo,
   ...frameReportKo,
+  ...cadKo,
   bay_mode: '기둥 간격 입력 방식',
   numeric_wheel_hint: '클릭 후 휠 또는 ↑↓ 키로 값을 조절합니다.',
   bay_error: '모든 베이 간격에 0보다 큰 숫자를 입력하세요.',
@@ -530,6 +532,9 @@ export const ko: Dict = {
   g_help_2: '릴리즈 노트',
   g_help_2_cmd: '릴리즈 노트',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_3_9_1: '축망 단계: DXF 평면도에서 축망을 가져옵니다. 주축이 스팬이 되고, 부분 축선은 눌러서 넣을 수 있습니다. 天正 레이어(DOTE/AXIS), 회전된 축망, 2배로 그린 도면, 단위 없는 도면, GBK 글자를 처리하고, 평면이 여러 장인 파일은 하나를 고릅니다. 파일은 브라우저 안에서만 읽습니다. DWG 는 지원하지 않으며 天正·中望 에서 DXF 로 저장하는 방법을 안내합니다.',
+  rn_v1_3_9_2: 'Gen NX 의 모델이 앱이 보낸 것과 달라지면, 모델을 다시 생성할 때까지 산출물 단계와 모든 내보내기를 막고 끝난 단계를 “다시”로 표시합니다.',
+  rn_v1_3_9_3: 'Gen NX 가 응답하지 않으면 그 작업의 나머지 명령은 보내지 않고(대화상자를 닫으면 뒤늦게 실행되므로), 첫 저장에서 끊긴 경우를 포함해 대화상자가 떠 있을 수 있다고 알려 줍니다. 15분까지 기다리는 것은 해석과 문서 열기뿐이고 저장·캡처는 3분입니다. 응답 없이 끊긴 복원은 복원 버튼을 비우고 백업 위치를 알려 줍니다.',
   rn_v1_3_8_1: '해석·설계 검토·최적화·상세 계산서는 먼저 Gen NX 에 열린 모델이 앱이 보낸 모델과 같은지 확인하고, 바뀌었으면 다른 부분을 알려 주고 멈춥니다.',
   rn_v1_3_8_2: 'Gen NX 가 응답하지 않으면 대화상자가 떠 있을 수 있으니 닫은 뒤 모델을 다시 생성하라고 알려 줍니다. 문서 열기·저장·캡처도 해석처럼 15분까지 기다리고, 응답 없이 끊긴 호출은 다시 보내지 않습니다.',
   rn_v1_3_7_1: '주기·참여질량을 Gen NX 에서 바로 받아 옵니다. 고유치 표 요청에 성분 목록을 넣었습니다(없으면 Gen NX 가 Unknown Error 를 냅니다). Gen 호출은 3분이 지나면 기다리기를 멈추고(해석만 15분), Gen NX 에 대화상자가 떠 있을 때 호출마다 15분씩 멈추지 않습니다. midas-nx 2.10.2 로 올렸습니다.',

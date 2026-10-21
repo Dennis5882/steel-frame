@@ -30,6 +30,8 @@ export function apiErrorMessage(e: unknown): string {
 export async function mapi<T = any>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, body?: Record<string, any>, note = ''): Promise<T> {
   const ep = path.startsWith('/') ? path : `/db/${path}`
   jobCall(`${method} ${ep}`) // 취소됐으면 여기서 Cancelled — 보내기 전에 멈춘다
+  /* 이 작업에서 Gen 이 한 번 응답 없이 끊겼으면 더 보내지 않는다 — 보내면 Gen 대기열에 쌓여 대화상자를 닫은 뒤 뒤늦게 실행된다 */
+  if (S.job?.noAnswer) throw Object.assign(new Error(S.job.noAnswer), { connection: true })
   log(`<span style="color:var(--blue)">${method}</span> ${ep}${note ? ` <span style="color:var(--dim)">· ${note}</span>` : ''}`, 'api')
   try {
     return (await getClient().request(method, ep, body as JsonObject | undefined, callTimeout(ep))) as T
@@ -37,7 +39,9 @@ export async function mapi<T = any>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', p
     const m = apiErrorMessage(e)
     log(`${method} ${ep} — ${m}`, 'err')
     /* 응답 없이 끊긴 호출은 표시를 남긴다 — 호출하는 쪽이 같은 요청을 다시 보내지 않게 (timeouts.ts isConnectionError) */
-    throw Object.assign(new Error(m), { connection: e instanceof MidasConnectionError })
+    const connection = e instanceof MidasConnectionError
+    if (connection && S.job) S.job.noAnswer = `${method} ${ep} — ${m}`
+    throw Object.assign(new Error(m), { connection })
   }
 }
 

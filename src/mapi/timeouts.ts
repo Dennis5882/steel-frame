@@ -1,11 +1,12 @@
 /* Gen 호출 대기 한도 — 화면(mapi/client.ts)과 라이브 스크립트(live-frame·live-detail)가 같이 쓴다. store 의존 없음.
    한도는 대기만 멈추고 Gen 작업은 취소하지 않는다. Gen 모달 대화상자가 뜨면 모든 호출이 응답하지 않으므로
-   기본은 짧게 두고, 수 분 걸릴 수 있는 문서 명령(해석·열기·저장·새 문서)과 캡처만 길게 준다 (midas-nx 2.10.2 README). */
+   기본은 짧게 두고, 수 분 걸릴 수 있는 해석과 (큰 백업) 문서 열기만 길게 준다 (midas-nx 2.10.2 README).
+   저장·새 문서·캡처는 금방 끝나고, 자동 저장(saveas)은 생성·해석·복원의 첫 호출이라 길게 주면 대화상자가 떠 있을 때 15분을 멈춘다. */
 import { MidasConnectionError } from 'midas-nx'
 
 export const DEFAULT_TIMEOUT_MS = 3 * 60 * 1000
 export const LONG_TIMEOUT_MS = 15 * 60 * 1000
-const LONG_CALLS = new Set(['/doc/anal', '/doc/open', '/doc/saveas', '/doc/new', '/view/capture'])
+const LONG_CALLS = new Set(['/doc/anal', '/doc/open'])
 
 /** 경로 정리 — 쿼리·끝의 '/' 를 떼고 소문자, '/' 로 시작하지 않으면 /db/ 아래로 (mapi() 와 같은 규칙) */
 export function normalizeEndpoint(path: string): string {

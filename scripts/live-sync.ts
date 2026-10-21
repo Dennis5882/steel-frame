@@ -10,9 +10,9 @@ import { buildFrame } from '../src/frame/geometry'
 import { TUTORIAL_SPEC } from '../src/frame/tutorial'
 import { framePayloads } from '../src/frame/gen'
 import type { Request } from '../src/frame/results'
-import { analyze, eigenRequest, expectOk, frameSyncPayload, sendFrame } from '../src/frame/run'
+import { FRAME_SYNC_DBS, analyze, eigenRequest, expectOk, frameSyncPayload, sendFrame } from '../src/frame/run'
 import { parseEigen } from '../src/frame/story'
-import { dbDifferences, diffText, type SyncDiff } from '../src/domain/genSync'
+import { compareGen, diffText } from '../src/domain/genSync'
 
 const client = new MidasClient({ mapiKey: await readMapiKey(), product: 'gen', timeout: DEFAULT_TIMEOUT_MS })
 const req: Request = (m, p, b) => client.request(m, p, b as any, callTimeout(p)) as Promise<any>
@@ -27,11 +27,8 @@ expectOk(await req('POST', '/doc/saveas', { Argument: `C:/temp/sf_frame_${stamp}
 await analyze(req)
 
 const sent = frameSyncPayload(P)
-const sync = async () => {
-  const out: SyncDiff[] = []
-  for (const [db, rec] of Object.entries(sent)) out.push(...dbDifferences(db, rec, (await req('GET', `/db/${db}`))?.[db]))
-  return out
-}
+/* 화면 assertGenSync 와 같은 비교 (domain/genSync.ts compareGen) */
+const sync = async () => (await compareGen(sent, FRAME_SYNC_DBS, async (db) => (await req('GET', `/db/${db}`))?.[db])).diffs
 const d0 = await sync()
 d0.slice(0, 10).forEach((d) => console.log('  ', diffText(d)))
 check(d0.length === 0, `sent model matches Gen (${Object.keys(sent).join(', ')}) — ${d0.length} diffs`)
@@ -40,7 +37,7 @@ check(d0.length === 0, `sent model matches Gen (${Object.keys(sent).join(', ')})
 const full = await req('POST', '/post/TABLE', eigenRequest())
 const small = await req('POST', '/post/TABLE', { Argument: { ...eigenRequest().Argument, COMPONENTS: ['Mode'] } }).catch((e: Error) => ({ error: e.message }))
 const ef = parseEigen(full?.EV), es = parseEigen((small as any)?.EV)
-console.log(`  eigen full ${JSON.stringify(full).length} B · ['Mode'] ${JSON.stringify(small).length} B`, (small as any).error ?? '')
+console.log(`  eigen full ${JSON.stringify(full ?? null).length} B · ['Mode'] ${JSON.stringify(small ?? null).length} B`, (small as any)?.error ?? '')
 check(!!ef && ef.periods[0] > 0, `full COMPONENTS: T1 ${ef?.periods[0]} s, mass X ${ef?.massX.at(-1)}%`)
 console.log(`INFO ['Mode'] only: ${es ? `T1 ${es.periods[0]} s, mass X ${es.massX.at(-1)}% Y ${es.massY.at(-1)}% — same as full: ${JSON.stringify(es) === JSON.stringify(ef)}` : 'no eigen table'}`)
 

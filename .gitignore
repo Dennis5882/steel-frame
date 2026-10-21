@@ -20,3 +20,6 @@ tmp/
 *.docx
 *.pptx
 *.xlsx
+
+# CAD sample drawings (local only, customer drawings)
+samples/cad/

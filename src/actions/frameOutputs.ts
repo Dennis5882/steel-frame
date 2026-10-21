@@ -18,6 +18,7 @@ import { outputBlocker, outputState, type FrameOutput } from '../frame/state'
 import { captureShots } from '../frame/captures'
 import { captureGen } from '../frame/run'
 import { assertFrameGen } from './frame'
+import { isConnectionError } from '../mapi/timeouts'
 import type { Request } from '../frame/results'
 import type { GenFigure } from '../frame/report'
 import { folderAccessSupported, folderName, forgetGenFolder, pickGenFolder, readFolderImage } from '../lib/genFolder'
@@ -176,7 +177,7 @@ export async function downloadFrameDetailedDocx(): Promise<void> {
     await assertFrameGen() // Gen 문서가 이 모델이 아니면 캡처하지 않는다
     const shots = captureShots(b.spec, b.model, F.design)
     stage('fr_cap_run', shots.length * 2 + 2)
-    const res = await captureGen(req, shots, genDir(), stamp() + '_' + Date.now().toString(36), { fatal: (e) => e instanceof Cancelled })
+    const res = await captureGen(req, shots, genDir(), stamp() + '_' + Date.now().toString(36), { fatal: (e) => e instanceof Cancelled || isConnectionError(e) })
     stage('fr_cap_read')
     const figures: GenFigure[] = [], failed: string[] = []
     for (const [i, r] of res.entries()) {

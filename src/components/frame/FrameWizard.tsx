@@ -11,6 +11,7 @@ import type { Axis, CnSeismicSpec, FrameSpec } from '../../frame/types'
 import { buildFrameModel } from '../../actions/frame'
 import { NumericInput } from '../NumericInput'
 import { FramePlan } from './FramePlan'
+import { CadImport } from './CadImport'
 import { PLAN_SHAPES, SHAPE_MIN, applyShape, braceBays, coordsOf, deleteSpan, formatSpans, insertSpan, parseSpans, planConnected, setGrid, setPanelState, shapeFits, shapeRemoved, spansOf, toggleBrace, type PlanShape } from '../../frame/plan'
 
 const r6 = (v: number) => +v.toFixed(6)
@@ -107,6 +108,7 @@ function GridStep({ spec, off }: { spec: FrameSpec; off: boolean }) {
       </div>
       <p className="mw-note">{t('fr_grid_hint')}</p>
     </section>
+    <CadImport off={off} />
     <section className="mw-group"><h4>{t('fr_shape')}</h4>
       <div className="fr-shapes" role="group" aria-label={t('fr_shape')}>{PLAN_SHAPES.map((sh) => {
         const fits = shapeFits(sh, n, m)

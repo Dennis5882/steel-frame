@@ -928,6 +928,20 @@ td.pos{color:var(--green)} td.neg{color:var(--red)}
 .fr-shapes svg{width:34px;height:26px}
 .fr-plan-stat{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.75rem;color:var(--muted);margin-bottom:8px}.fr-plan-stat b{color:var(--txt);font-family:var(--font-mono)}
 .fr-axis,.fr-dim,.fr-chev,.fr-edge{pointer-events:none}
+.cad-open{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}.cad-open .mw-note{margin:0;flex:1 1 220px}
+.cad-panel{margin-top:10px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg)}
+.cad-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:.78rem;margin-bottom:6px;overflow-wrap:anywhere}
+.cad-layers{border:0;padding:0;margin:8px 0;display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.74rem}.cad-layers legend{font-size:.72rem;color:var(--muted);margin-bottom:4px}
+.cad-layers label{display:inline-flex;align-items:center;gap:4px}.cad-layers small{color:var(--muted);font-family:var(--font-mono)}
+.cad-warn{margin:6px 0 8px 16px;font-size:.72rem;line-height:1.6;color:var(--amber,var(--txt-2))}
+.cad-preview{width:100%;max-height:340px;display:block;margin:6px 0;background:var(--panel);border-radius:6px}
+.cad-ax line{stroke-width:1.4px}.cad-ax circle{fill:var(--panel);stroke-width:1px}.cad-ax text{fill:var(--txt)}
+.cad-ax.main line,.cad-ax.main circle{stroke:var(--cyan)}
+.cad-ax.part line,.cad-ax.part circle{stroke:var(--muted);stroke-dasharray:6 4}
+.cad-ax.picked line,.cad-ax.picked circle{stroke:var(--blue)}
+.cad-ax line.cad-hit{stroke:transparent;stroke-dasharray:none;cursor:pointer;pointer-events:stroke}
+.cad-ax.part line.cad-hit:hover,.cad-ax.picked line.cad-hit:hover{stroke:color-mix(in srgb,var(--blue) 25%,transparent)}
+.cad-help{margin-top:8px;font-size:.72rem;color:var(--txt-2)}.cad-help summary{cursor:pointer;color:var(--cyan)}.cad-help ul{margin:6px 0 0 16px;line-height:1.7}
 
 .fr-new{margin-top:6px}.fr-new strong{font-size:1rem}.fr-example{margin-top:10px;align-self:flex-start;display:inline-flex;gap:6px;align-items:center}
 .fr-cell,.fr-tri,.fr-diag,.fr-tri-ghost,.fr-span-sel{pointer-events:none}

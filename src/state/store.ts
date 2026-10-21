@@ -48,7 +48,8 @@ export interface Built { spec: FactorySpec; model: FactoryModel; info: LoadInfo;
 export type JobKind = 'build' | 'anal' | 'design' | 'opt' | 'pdf' | 'docx' | 'dwgpdf' | 'restore'
 /** 파일 생성 작업 — Gen·결과를 바꾸지 않음 (결과 개정 유지, 취소 안내 문구 공통) */
 export const FILE_JOBS: ReadonlySet<JobKind> = new Set<JobKind>(['pdf', 'docx', 'dwgpdf'])
-export interface Job { kind: JobKind; stage: string; step: number; total: number; detail: string; t0: number; cancel: boolean; iter?: [number, number]; activityId?: number }
+/** noAnswer = 이 작업에서 응답 없이 끊긴 첫 호출 — 이후 호출은 보내지 않는다 (mapi/client.ts) */
+export interface Job { kind: JobKind; stage: string; step: number; total: number; detail: string; t0: number; cancel: boolean; iter?: [number, number]; activityId?: number; noAnswer?: string }
 
 /** 반력 합계 (하중 케이스별) */
 export interface ReactionSum { lc: string; fx: number; fy: number; fz: number }
