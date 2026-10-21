@@ -8,7 +8,7 @@ import { tab } from '../../state/ui'
 import { confirmAction } from '../ConfirmDialog'
 import { JobBar } from '../JobBar'
 import { ActivityHistory, ArtifactList, NoticeCenter } from '../ActivityViews'
-import { F, frameBlocker, frameStale, frameTaskStatus, outputBlocker, outputState, resetFrame, startTemplate, type FrameOutput, type FrameTask, type OutputState } from '../../frame/state'
+import { F, frameBlocker, frameStale, frameTaskStatus, outputBlocker, outputState, resetFrame, startTemplate, editCam, type FrameOutput, type FrameTask, type OutputState } from '../../frame/state'
 import { analyzeFrame, designFrame, optimizeFrame, restoreFrameBackup } from '../../actions/frame'
 import { downloadFrameDetailedDocx, downloadFrameDrawingsPdf, downloadFrameDxf, downloadFrameQuantities, downloadFrameReportDocx, downloadFrameReportPdf, downloadFrameChecks, openFrameReport } from '../../actions/frameOutputs'
 import { OPT_MAX_ITER, OPT_TARGET } from '../../frame/optimize'
@@ -178,7 +178,7 @@ export function FrameWorkspace({ guideCollapsed, onOpenGuide, onOpenMapi }: { gu
     if (F.draft && !await confirmAction({ title: t('fr_replace_title'), body: t('fr_replace_body'), ok: t('fr_replace_ok') })) return
     startTemplate(k, how)
   }
-  const resume = () => { F.view = 'edit'; S.task = 'model'; S.panel = 'viewP'; S.viewNonce++; notify() }
+  const resume = () => { F.view = 'edit'; editCam(); S.task = 'model'; S.panel = 'viewP'; S.viewNonce++; notify() }
   return <section ref={root} className={`workspace${guideCollapsed ? ' g-closed' : ''}`} aria-label={t('ws_title')}>
     <div className="ws-toolbar">
       <div className="ws-toolbar-title">{guideCollapsed && <button className="btn btn-ghost" onClick={onOpenGuide} aria-label={t('guide_open')}>☰</button>}<Building2 size={16} /><strong>{t(id === 'history' ? 'flow_history' : TASKS.find((x) => x.id === id)!.label)}</strong></div>
@@ -189,15 +189,17 @@ export function FrameWorkspace({ guideCollapsed, onOpenGuide, onOpenMapi }: { gu
     </div>
     <NoticeCenter />
     {id === 'model' && !editing && <div className="ws-start">
-      <div className="ws-hero"><h2 tabIndex={-1}>{t('fr_start_title')}</h2><p>{t('fr_start_hint')}</p></div>
-      <section className="project-code"><h3 className="ws-section-label">{t('code_label')}</h3><p><strong>{t('fr_code_label')}</strong></p><p className="pe-tip">{t('fr_code_note')}</p></section>
+      <div className="ws-hero"><h2 tabIndex={-1}>{t('ws_start_q')}</h2><p>{t('ws_start_lead')}</p>
+        <p className="fr-code-line"><span>{t('code_label')}</span><strong>{t('fr_code_label')}</strong></p></div>
       {F.draft && <button className="ws-resume-card" disabled={s.busy} onClick={resume}><FolderOpen size={20} /><span><strong>{t('ws_resume')}</strong><small>{t('ws_resume_hint')}</small></span><ArrowRight size={16} /></button>}
-      <button className="ws-free fr-new" disabled={s.busy} onClick={() => void start('blank', 'dxf')}><FileUp size={22} /><span><strong>{t('fr_start_dxf')}</strong><small>{t('fr_start_dxf_hint')}</small></span><ArrowRight size={16} /></button>
-      <button className="ws-free fr-new" disabled={s.busy} onClick={() => void start('blank')}><Plus size={22} /><span><strong>{t('fr_new')}</strong><small>{t('fr_new_hint')}</small></span><ArrowRight size={16} /></button>
-      <button className="btn btn-ghost fr-example" disabled={s.busy} onClick={() => void start('tutorial')}><BookOpen size={14} />{t('fr_example')}</button>
-      <p className="ws-start-note">{t('fr_example_hint')}</p>
+      <div className="fr-start-choices">
+        <button className="fr-choice" disabled={s.busy} onClick={() => void start('blank', 'dxf')}><FileUp size={28} /><strong>{t('fr_start_dxf')}</strong></button>
+        <button className="fr-choice" disabled={s.busy} onClick={() => void start('blank')}><Plus size={28} /><strong>{t('fr_new')}</strong></button>
+      </div>
+      <button className="btn btn-ghost fr-example" disabled={s.busy} title={t('fr_example_hint')} onClick={() => void start('tutorial')}><BookOpen size={14} />{t('fr_example')}</button>
       <p className="ws-start-note">{t('ws_local_note')}</p>
-      <p className="ws-start-note"><CircleHelp size={13} /> {t('fr_scope_note')}</p>
+      <details className="fr-start-more"><summary><CircleHelp size={13} /> {t('fr_start_more')}</summary>
+        <p>{t('fr_code_note')}</p><p>{t('fr_scope_note')}</p><p>{t('fr_example_hint')}</p></details>
     </div>}
     {editing && <div className="ws-editor"><FrameWizard onHome={home} /></div>}
     <FrameTaskStage onOpenMapi={onOpenMapi} />

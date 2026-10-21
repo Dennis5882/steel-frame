@@ -86,7 +86,8 @@ export function FrameView3D() {
   const lang = useLang()
   const ref = useRef<HTMLDivElement>(null)
   const preview = s.task === 'model' && F.view === 'edit' && (!F.built || frameStale(F))
-  const model = useMemo(() => preview ? draftModel(F.draft).model : F.built?.model ?? draftModel(F.draft).model, [s.viewNonce, preview])
+  const waiting = preview && F.start === 'dxf' && !F.cad // DXF 로 시작했는데 아직 도면을 안 열었음
+  const model = useMemo(() => waiting ? null : preview ? draftModel(F.draft).model : F.built?.model ?? draftModel(F.draft).model, [s.viewNonce, preview, waiting])
   const spec = preview ? F.draft : F.built?.spec ?? F.draft
   const ratio = useMemo(() => !preview && F.ratioView && F.design ? new Map(F.design.members.map((m) => [m.id, Math.max(m.ratio, m.detailRatio)])) : null, [s.viewNonce, preview, F.ratioView, F.design])
 
@@ -141,7 +142,7 @@ export function FrameView3D() {
         .map(([k, color, label]) => <button key={k} className={`vtog ${(S.vis3d as any)[k] !== false ? 'on' : 'off'}`} aria-pressed={(S.vis3d as any)[k] !== false} onClick={() => toggle(k)}>
           <span className={`swatch sw-${k === 'support' ? 'diamond' : 'line'}`} style={{ background: `var(${color})` }} /><span>{label}</span></button>)}
     </div>}
-    {model ? <div id="plot" ref={ref} /> : <div className="res-empty" style={{ flex: 1 }}>{t('fr_view_empty')}</div>}
+    {model ? <div id="plot" ref={ref} /> : <div className="res-empty" style={{ flex: 1 }}>{t(waiting ? 'cad_view_wait' : 'fr_view_empty')}</div>}
     {model && <div className="view-stats">
       <span className="vs-item">{t('st_node')} <span className="vs-val">{model.nodes.length}</span></span>
       <span className="vs-item">{t('st_elem')} <span className="vs-val">{model.elements.length}</span></span>

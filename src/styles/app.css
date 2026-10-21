@@ -947,6 +947,19 @@ td.pos{color:var(--green)} td.neg{color:var(--red)}
 .fr-dim.src-geom{fill:var(--amber,var(--muted))}.fr-dim.src-conflict{fill:var(--red);font-weight:700}
 .cad-source{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:.76rem;margin:4px 0 8px}.cad-source b{font-family:var(--font-mono)}
 .cad-start{border:1px solid var(--cyan);border-radius:10px;padding:12px 14px;background:var(--bg)}
+.fr-code-line{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;margin-top:10px;font-size:.74rem;color:var(--muted)}.fr-code-line strong{color:var(--txt-hi);font-weight:600}
+.fr-start-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:20px}
+.fr-choice{display:flex;flex-direction:column;align-items:flex-start;gap:8px;text-align:left;padding:20px 18px;border:1px solid var(--border);border-radius:10px;background:var(--panel);color:var(--cyan);font:inherit;cursor:pointer;min-height:110px;justify-content:center}
+.fr-choice strong{font-size:1rem;color:var(--txt-hi);font-weight:600}.fr-choice small{font-size:.74rem;color:var(--muted);line-height:1.6}
+.fr-choice:hover:not(:disabled),.fr-choice:focus-visible{border-color:var(--cyan);background:color-mix(in srgb,var(--cyan) 5%,var(--panel))}.fr-choice:disabled{opacity:.5;cursor:default}
+.fr-start-more{margin-top:14px;font-size:.7rem;color:var(--muted);line-height:1.7}.fr-start-more summary{cursor:pointer;color:var(--cyan);display:inline-flex;gap:5px;align-items:center}.fr-start-more p{margin:6px 0 0}
+.cad-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;width:100%;min-height:170px;padding:22px;border:2px dashed color-mix(in srgb,var(--cyan) 45%,var(--border));border-radius:10px;background:var(--panel);color:var(--cyan);font:inherit;cursor:pointer;text-align:center}
+.cad-drop strong{font-size:.92rem;color:var(--txt-hi);font-weight:600}.cad-drop small{font-size:.72rem;color:var(--muted)}
+.cad-drop:hover:not(:disabled),.cad-drop.over{border-color:var(--cyan);background:color-mix(in srgb,var(--cyan) 7%,var(--panel))}.cad-drop:disabled{opacity:.5;cursor:default}
+.cad-open.over{outline:2px dashed var(--cyan);outline-offset:4px;border-radius:6px}
+.cad-link{background:none;border:0;padding:0;margin-top:8px;color:var(--cyan);font:inherit;font-size:.74rem;cursor:pointer;text-decoration:underline}.cad-link:disabled{opacity:.5;cursor:default}
+.cad-apply{margin-top:8px}
+.cad-settings{margin-top:12px;font-size:.74rem}.cad-settings>summary{cursor:pointer;color:var(--cyan)}.cad-settings[open]>summary{margin-bottom:8px}
 .cad-help{margin-top:8px;font-size:.72rem;color:var(--txt-2)}.cad-help summary{cursor:pointer;color:var(--cyan)}.cad-help ul{margin:6px 0 0 16px;line-height:1.7}
 
 .fr-new{margin-top:6px}.fr-new strong{font-size:1rem}.fr-example{margin-top:10px;align-self:flex-start;display:inline-flex;gap:6px;align-items:center}

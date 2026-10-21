@@ -13,6 +13,15 @@ import { FRAME_TEMPLATES, type FrameTemplateKey } from './templates'
 
 export const FRAME_STEPS = ['fs_grid', 'fs_stories', 'fs_sections', 'fs_braces', 'fs_loads', 'fs_lateral', 'fs_review'] as const
 export const REVIEW_STEP = FRAME_STEPS.length - 1
+/** 하중 단계 전에는 단계마다 3D 시점을 정한다 (격자 평면, 층·단면 측면, 가새 평면). 하중 단계로 처음 넘어가면 ISO, 그 뒤는 고른 시점 유지 */
+const LOAD_STEP = FRAME_STEPS.indexOf('fs_loads')
+const STEP_CAMS: Record<number, 'top' | 'side'> = { 0: 'top', 1: 'side', 2: 'side', 3: 'top' }
+function stepCam(from: number, to: number): void {
+  if (to < LOAD_STEP) S.cam = STEP_CAMS[to] ?? 'top'
+  else if (from < LOAD_STEP) S.cam = 'iso'
+}
+/** 편집 화면으로 돌아올 때 (이어서 하기) */
+export const editCam = (): void => stepCam(LOAD_STEP, F.step)
 
 /** trial = 최적화가 중단돼 Gen 에 남은 시험 모델 (입력은 최적화 전 단면으로 되돌려 둠). 모델을 다시 만들면 새 FrameBuilt 라 사라진다 */
 export interface FrameBuilt { spec: FrameSpec; model: FrameModel; P: FramePayloads; counts: SendCounts; file: string; trial?: boolean }
@@ -62,6 +71,7 @@ export function startTemplate(key: FrameTemplateKey, start: 'manual' | 'dxf' = '
   F.view = 'edit'
   F.step = 0
   F.visited = 0
+  stepCam(0, 0)
   S.task = 'model'
   S.panel = 'viewP'
   S.viewNonce++
@@ -81,7 +91,9 @@ export function editDraft(fn: (s: FrameSpec) => void): void {
 }
 
 export function goStep(i: number): void {
+  const from = F.step
   F.step = Math.max(0, Math.min(REVIEW_STEP, i))
+  stepCam(from, F.step)
   F.visited = Math.max(F.visited, F.step)
   notify()
 }

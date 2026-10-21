@@ -544,6 +544,8 @@ export const en = {
   g_help_2: 'Release notes',
   g_help_2_cmd: 'release notes',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_4_2_1: 'Simpler start: two cards, Import DXF and New frame. Design codes and scope fold away. Import DXF opens a large drop area (drag a file in or click). After reading, the axis preview, spans and Use these axes come first, and unit, scale and layers fold into Recognition settings. New frame no longer shows the DXF section.',
+  rn_v1_4_2_2: 'The 3D preview follows the step: plan for the grid and braces, side view for storeys and sections, and ISO from floor loads on.',
   rn_v1_4_1_1: 'DXF import uses the dimension values in the drawing for the spans: a span within 2 % (or 30 mm) of a dimension takes the dimension value, a dimension that disagrees more is flagged in red and the line position is kept, and spans without a dimension come from the lines (amber). Dimension objects are read with their displayed values.',
   rn_v1_4_1_2: 'New start choice: Start from a DXF plan, or draw the frame yourself. Starting from DXF opens the drawing first; after import the spans stay locked to the drawing (panels, triangles and axis numbers can still be changed), the plan shows the drawing underneath, and Edit spans myself / Back to the DXF values switch between the two.',
   rn_v1_4_0_1: 'DXF import suggests the plan shape from the columns: a panel is left out when a corner that should have a column (or a wall) has none. An inner node missing one column is kept as a long-span beam, and nodes made by a partial axis outside its drawn length are not counted. The preview shades the panels to leave out; the suggestion can be turned off and the column layer changed.',

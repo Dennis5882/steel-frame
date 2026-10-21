@@ -2,10 +2,16 @@
    天正·中望 메뉴 이름은 중국어 원문 그대로 둔다(사용자가 프로그램에서 찾는 글자). zh-CN 은 대륙 용어, zh-TW 는 대만 용어. */
 
 export const cadEn = {
-  fr_start_dxf: 'Start from a DXF plan',
-  fr_start_dxf_hint: 'Reads the axes of a plan drawing: spans follow the dimension values in the drawing and the plan shape follows the columns. Then set storeys, sections and loads.',
+  ws_start_q: 'How do you want to start?',
+  ws_start_lead: 'Set the plan first, then storeys, sections and loads; the app builds the Gen NX model.',
+  fr_start_more: 'Design codes and scope',
+  cad_drop: 'Drop a DXF file here or click to choose',
+  cad_drop_hint: '.dxf only · read in this browser, not uploaded',
+  cad_settings: 'Recognition settings (unit, scale, layers)',
+  cad_view_wait: 'Open a DXF plan to see the model here.',
+  fr_start_dxf: 'Import DXF',
   cad_start_title: 'Open the plan drawing (DXF)',
-  cad_start_hint: 'The axes become the grid. Spans follow the dimension values in the drawing; where there is no dimension, the line positions are used. The file is read in this browser only.',
+  cad_start_hint: 'The axes become the grid. Spans follow the dimension values in the drawing; where there is no dimension, the line positions are used.',
   cad_to_manual: 'Draw the grid myself instead',
   cad_reopen: 'Open another DXF',
   cad_dim_summary: (d: number, n: number) => `Spans from dimensions: ${d} / ${n}`,
@@ -63,10 +69,16 @@ export const cadEn = {
 type CadDict = typeof cadEn
 
 export const cadKo: CadDict = {
-  fr_start_dxf: 'DXF 평면도로 시작',
-  fr_start_dxf_hint: '평면도의 축망을 읽습니다. 스팬은 도면의 치수 값을, 평면 형상은 기둥 위치를 따릅니다. 그다음 층·단면·하중을 정합니다.',
+  ws_start_q: '어떻게 시작할까요?',
+  ws_start_lead: '평면을 먼저 정하고 층·단면·하중을 입력하면 Gen NX 모델을 만들어 줍니다.',
+  fr_start_more: '설계기준·검토 범위',
+  cad_drop: 'DXF 파일을 여기에 끌어놓거나 눌러서 고르세요',
+  cad_drop_hint: '.dxf 만 · 이 브라우저 안에서만 읽고 올리지 않습니다',
+  cad_settings: '인식 설정 (단위·축척·레이어)',
+  cad_view_wait: 'DXF 평면도를 열면 여기에 모델이 보입니다.',
+  fr_start_dxf: 'DXF 가져오기',
   cad_start_title: '평면도(DXF) 열기',
-  cad_start_hint: '축선이 격자가 됩니다. 스팬은 도면의 치수 값을 따르고, 치수가 없는 곳은 선 위치를 씁니다. 파일은 이 브라우저 안에서만 읽습니다.',
+  cad_start_hint: '축선이 격자가 됩니다. 스팬은 도면의 치수 값을 따르고, 치수가 없는 곳은 선 위치를 씁니다.',
   cad_to_manual: '직접 그리기로 바꾸기',
   cad_reopen: '다른 DXF 열기',
   cad_dim_summary: (d, n) => `치수로 정한 스팬: ${d} / ${n}`,
@@ -122,10 +134,16 @@ export const cadKo: CadDict = {
 }
 
 export const cadZhCN: CadDict = {
-  fr_start_dxf: '从 DXF 平面图开始',
-  fr_start_dxf_hint: '读取平面图中的轴网：跨度采用图中的尺寸标注值，平面形状按柱位确定。然后设置楼层、截面和荷载。',
+  ws_start_q: '选择开始方式',
+  ws_start_lead: '先确定平面，再输入楼层、截面和荷载，即可生成 Gen NX 模型。',
+  fr_start_more: '设计规范与验算范围',
+  cad_drop: '将 DXF 文件拖到此处，或点击选择',
+  cad_drop_hint: '仅限 .dxf · 只在本浏览器中读取，不上传',
+  cad_settings: '识别设置（单位、比例、图层）',
+  cad_view_wait: '打开 DXF 平面图后，模型将显示在此处。',
+  fr_start_dxf: '导入 DXF',
   cad_start_title: '打开平面图（DXF）',
-  cad_start_hint: '轴线将成为轴网。跨度采用图中的尺寸标注值，没有标注处按线的位置。文件只在本浏览器中读取。',
+  cad_start_hint: '轴线将成为轴网。跨度采用图中的尺寸标注值，没有标注处按线的位置。',
   cad_to_manual: '改为手动绘制',
   cad_reopen: '打开其他 DXF',
   cad_dim_summary: (d, n) => `按尺寸标注确定的跨度：${d} / ${n}`,
@@ -181,10 +199,16 @@ export const cadZhCN: CadDict = {
 }
 
 export const cadZhTW: CadDict = {
-  fr_start_dxf: '從 DXF 平面圖開始',
-  fr_start_dxf_hint: '讀取平面圖中的軸網：跨度採用圖中的尺寸標註值，平面形狀依柱位決定。接著設定樓層、斷面與載重。',
+  ws_start_q: '選擇開始方式',
+  ws_start_lead: '先決定平面，再輸入樓層、斷面與載重，即可建立 Gen NX 模型。',
+  fr_start_more: '設計規範與檢核範圍',
+  cad_drop: '將 DXF 檔案拖曳到此處，或點選選擇',
+  cad_drop_hint: '僅限 .dxf · 只在本瀏覽器中讀取，不上傳',
+  cad_settings: '識別設定（單位、比例、圖層）',
+  cad_view_wait: '開啟 DXF 平面圖後，模型將顯示在此處。',
+  fr_start_dxf: '匯入 DXF',
   cad_start_title: '開啟平面圖（DXF）',
-  cad_start_hint: '軸線將成為軸網。跨度採用圖中的尺寸標註值，沒有標註處依線的位置。檔案只在本瀏覽器中讀取。',
+  cad_start_hint: '軸線將成為軸網。跨度採用圖中的尺寸標註值，沒有標註處依線的位置。',
   cad_to_manual: '改為手動繪製',
   cad_reopen: '開啟其他 DXF',
   cad_dim_summary: (d, n) => `依尺寸標註決定的跨度：${d} / ${n}`,

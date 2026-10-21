@@ -151,7 +151,6 @@ function GridStep({ spec, off }: { spec: FrameSpec; off: boolean }) {
       <div className="fr-axes"><LabelRow spec={spec} axis="X" disabled={off} /><LabelRow spec={spec} axis="Y" disabled={off} /></div>
       <p className="mw-note">{t('fr_axis_labels_hint')}</p>
     </section>
-    <CadImport off={off} />
     <section className="mw-group"><h4>{t('fr_shape')}</h4>
       {!locked && <div className="fr-shapes" role="group" aria-label={t('fr_shape')}>{PLAN_SHAPES.map((sh) => {
         const fits = shapeFits(sh, n, m)
@@ -175,6 +174,8 @@ function GridStep({ spec, off }: { spec: FrameSpec; off: boolean }) {
       <div className="fr-plan-stat"><span>{t('fr_panels')} <b>{n * m - spec.removed.length} / {n * m}</b></span>{(spec.cuts?.length ?? 0) > 0 && <span>{t('fr_tool_tri')} <b>{spec.cuts!.length}</b></span>}{model && <span>{t('fr_area_story')} <b>{model.floorArea} m²</b></span>}{model && <span>{t('fr_columns_per_story')} <b>{model.supports.length}</b></span>}</div>
       {!connected && <p className="mw-error" role="alert">{t('fr_plan_disconnected')}</p>}
     </section>
+    {/* 직접 그리기로 시작했으면 DXF 가져오기를 두지 않는다. DXF 로 시작했으면 맨 아래에 '다른 DXF 열기' */}
+    {cad && <CadImport off={off} />}
   </>
 }
 

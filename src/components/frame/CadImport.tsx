@@ -71,6 +71,7 @@ export function CadImport({ off, variant = 'section' }: { off: boolean; variant?
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [colLayers, setColLayers] = useState<string[] | null>(null)
   const [useShape, setUseShape] = useState(true)
+  const [over, setOver] = useState(false)
 
   async function open(f: File) {
     setMsg(null)
@@ -121,52 +122,61 @@ export function CadImport({ off, variant = 'section' }: { off: boolean; variant?
   }
 
   const head = variant === 'start' ? 'cad_start_title' : F.cad ? 'cad_reopen' : 'cad_import'
+  const fresh = variant === 'start' && !F.cad
+  /* 파일 끌어놓기 — 처음 화면(큰 영역)과 아래 '다른 DXF 열기' 공통 */
+  const drop = {
+    onDragOver: (e: React.DragEvent) => { if (off || busy) return; e.preventDefault(); setOver(true) },
+    onDragLeave: () => setOver(false),
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files?.[0]; if (f && !off && !busy) void open(f) },
+  }
+  const layerBoxes = (sel: string[], set: (n: string[]) => void) => lineLayers.map((l) => <label key={l.name}><input type="checkbox" disabled={off} checked={sel.includes(l.name)}
+    onChange={(e) => set(e.target.checked ? [...sel, l.name] : sel.filter((n) => n !== l.name))} /><span>{l.name}</span><small>{l.lines}</small></label>)
   return <section className={`mw-group cad-import${variant === 'start' ? ' cad-start' : ''}`}><h4>{t(head)}</h4>
-    <div className="cad-open">
+    <input ref={input} type="file" accept=".dxf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void open(f) }} />
+    {variant === 'start' && !L ? <>
+      <button type="button" className={`cad-drop${over ? ' over' : ''}`} disabled={off || busy} onClick={() => input.current?.click()} {...drop}>
+        <FileUp size={30} /><strong>{t(busy ? 'cad_reading' : 'cad_drop')}</strong><small>{t('cad_drop_hint')}</small></button>
+      <p className="mw-note">{t('cad_start_hint')}</p>
+      <button type="button" className="cad-link" disabled={off || busy} onClick={setStartManual}>{t('cad_to_manual')}</button>
+    </> : <div className={`cad-open${over ? ' over' : ''}`} {...drop}>
       <button type="button" className="btn btn-ghost" disabled={off || busy} onClick={() => input.current?.click()}><FileUp size={14} />{t(busy ? 'cad_reading' : 'cad_import_btn')}</button>
-      <input ref={input} type="file" accept=".dxf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void open(f) }} />
-      <span className="mw-note">{t(variant === 'start' ? 'cad_start_hint' : 'cad_import_hint')}</span>
-      {variant === 'start' && <button type="button" className="btn btn-ghost" disabled={off || busy} onClick={setStartManual}>{t('cad_to_manual')}</button>}
-    </div>
+      {!L && <span className="mw-note">{t('cad_import_hint')}</span>}
+    </div>}
     {msg && <p className={msg.kind === 'err' ? 'mw-error' : 'pe-tip'} role={msg.kind === 'err' ? 'alert' : 'status'}>{msg.text}</p>}
     {L && g && <div className="cad-panel">
       <div className="cad-head"><b>{t('cad_file', L.name, L.d.entities.length)}</b>
         <button type="button" className="btn btn-ghost" aria-label={t('cad_close')} onClick={() => setL(null)}><X size={14} /></button></div>
-      <div className="pe-grid">
-        {regions.length > 1 && <label className="pe-f"><span>{t('cad_region')}</span><div className="pe-in">
-          <select value={Math.min(region, regions.length - 1)} disabled={off} onChange={(e) => { setRegion(Number(e.target.value)); setPicked(new Set()) }}>
-            {regions.map((r, i) => <option key={i} value={i}>{t('cad_region_opt', i + 1, r.lines)}</option>)}</select></div></label>}
-        <label className="pe-f"><span>{t('cad_unit')}</span><div className="pe-in">
-          <select value={g.unitMm} disabled={off} onChange={(e) => setUnitMm(Number(e.target.value))}>
-            {UNITS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></div></label>
-        <label className="pe-f"><span>{t('cad_scale')}</span><div className="pe-in">
-          <select value={scale ?? (g.scale && !g.scale.reject ? g.scale.factor : 1)} disabled={off} onChange={(e) => setScale(Number(e.target.value))}>
-            {SCALES.map((k) => <option key={k} value={k}>{k === 1 ? t('cad_scale_true') : t('cad_scale_k', k)}</option>)}</select></div></label>
-      </div>
-      <fieldset className="cad-layers"><legend>{t('cad_layers')}</legend>
-        {lineLayers.map((l) => <label key={l.name}><input type="checkbox" disabled={off} checked={use.includes(l.name)}
-          onChange={(e) => { setLayers(e.target.checked ? [...use, l.name] : use.filter((n) => n !== l.name)); setPicked(new Set()); setRegion(0) }} /><span>{l.name}</span><small>{l.lines}</small></label>)}
-      </fieldset>
-      <fieldset className="cad-layers"><legend>{t('cad_col_layers')}</legend>
-        {lineLayers.map((l) => <label key={l.name}><input type="checkbox" disabled={off} checked={colUse.includes(l.name)}
-          onChange={(e) => setColLayers(e.target.checked ? [...colUse, l.name] : colUse.filter((n) => n !== l.name))} /><span>{l.name}</span><small>{l.lines}</small></label>)}
-      </fieldset>
-      {g.warnings.length > 0 && <ul className="cad-warn">{g.warnings.filter((w) => w !== 'few_axes' || g.axes.length > 0).map((w) => <li key={w}>{warningText(w, g)}</li>)}</ul>}
+      {regions.length > 1 && <label className="pe-f"><span>{t('cad_region')}</span><div className="pe-in">
+        <select value={Math.min(region, regions.length - 1)} disabled={off} onChange={(e) => { setRegion(Number(e.target.value)); setPicked(new Set()) }}>
+          {regions.map((r, i) => <option key={i} value={i}>{t('cad_region_opt', i + 1, r.lines)}</option>)}</select></div></label>}
       {g.axes.length ? <>
         <AxisPreview g={g} picked={picked} onToggle={toggle} cols={cols} shape={shape} extra={extra} />
-        {suggestion?.removed.length ? <label className="pe-f fr-check"><input type="checkbox" checked={useShape} disabled={off} onChange={(e) => setUseShape(e.target.checked)} />
-          <span>{t('cad_shape_use', suggestion.columns, suggestion.removed.length)}</span></label>
-          : <p className="mw-note">{suggestion ? t('cad_shape_all') : cols.length ? t('cad_shape_fail', cols.length) : t('cad_shape_none')}</p>}
-        {!!suggestion?.removed.length && useShape && <p className="mw-note">{t('cad_shape_hint')}</p>}
-        {g.axes.some((a) => !a.main) && <p className="mw-note">{t('cad_partial_hint')}</p>}
         {result && <div className="fr-plan-stat"><span><b>{t('cad_result', nx, ny)}</b></span>
           <span>X <b>{spans(result.xs).join(', ')}</b> m</span><span>Y <b>{spans(result.ys).join(', ')}</b> m</span>
           <span>{t('cad_dim_summary', srcAll.filter((k) => k === 'dim').length, srcAll.length)}</span></div>}
         {srcAll.includes('conflict') && <p className="mw-error" role="alert">{t('cad_conflicts', srcAll.filter((k) => k === 'conflict').length)}</p>}
         {(nx > MAX_SPANS || ny > MAX_SPANS) && <p className="mw-error" role="alert">{t('cad_too_many')}</p>}
-        <p className="mw-note">{t('cad_apply_note')}</p>
-        <button type="button" className="btn btn-c" disabled={off || !canApply} onClick={() => void apply()}>{t('cad_apply')}</button>
+        {suggestion?.removed.length ? <label className="pe-f fr-check"><input type="checkbox" checked={useShape} disabled={off} onChange={(e) => setUseShape(e.target.checked)} />
+          <span>{t('cad_shape_use', suggestion.columns, suggestion.removed.length)}</span></label>
+          : <p className="mw-note">{suggestion ? t('cad_shape_all') : cols.length ? t('cad_shape_fail', cols.length) : t('cad_shape_none')}</p>}
+        {g.axes.some((a) => !a.main) && <p className="mw-note">{t('cad_partial_hint')}</p>}
+        {!fresh && <p className="mw-note">{t('cad_apply_note')}</p>}
+        <button type="button" className="btn btn-c cad-apply" disabled={off || !canApply} onClick={() => void apply()}>{t('cad_apply')}</button>
       </> : <p className="mw-error" role="alert">{t('cad_none')}</p>}
+      {/* 인식 설정 — 대부분 자동으로 맞으니 접어 둔다. 축을 못 찾았거나 단위를 추정했으면 펼침 */}
+      <details className="cad-settings" open={!g.axes.length || g.warnings.includes('unit_guessed') || undefined}><summary>{t('cad_settings')}</summary>
+        {g.warnings.length > 0 && <ul className="cad-warn">{g.warnings.filter((w) => w !== 'few_axes' || g.axes.length > 0).map((w) => <li key={w}>{warningText(w, g)}</li>)}</ul>}
+        <div className="pe-grid">
+          <label className="pe-f"><span>{t('cad_unit')}</span><div className="pe-in">
+            <select value={g.unitMm} disabled={off} onChange={(e) => setUnitMm(Number(e.target.value))}>
+              {UNITS.map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></div></label>
+          <label className="pe-f"><span>{t('cad_scale')}</span><div className="pe-in">
+            <select value={scale ?? (g.scale && !g.scale.reject ? g.scale.factor : 1)} disabled={off} onChange={(e) => setScale(Number(e.target.value))}>
+              {SCALES.map((k) => <option key={k} value={k}>{k === 1 ? t('cad_scale_true') : t('cad_scale_k', k)}</option>)}</select></div></label>
+        </div>
+        <fieldset className="cad-layers"><legend>{t('cad_layers')}</legend>{layerBoxes(use, (n) => { setLayers(n); setPicked(new Set()); setRegion(0) })}</fieldset>
+        <fieldset className="cad-layers"><legend>{t('cad_col_layers')}</legend>{layerBoxes(colUse, setColLayers)}</fieldset>
+      </details>
     </div>}
     <details className="cad-help"><summary>{t('cad_help')}</summary>
       <ul><li>{t('cad_help_tarch')}</li><li>{t('cad_help_zw')}</li><li>{t('cad_help_common')}</li></ul></details>
