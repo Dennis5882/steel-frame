@@ -45,14 +45,22 @@ export interface SendCounts { NODE: number; ELEM: number; CONS: number; FBLA: nu
 export async function sendFrame(req: Request, P: FramePayloads, model: FrameModel): Promise<SendCounts> {
   expectOk(await req('POST', '/doc/new', {}), 'doc/new')
   for (const db of DB_ORDER) await req('PUT', `/db/${db}`, { Assign: (P as any)[db] })
-  await req('POST', '/ope/STOR', { Argument: { SEIS_ECC: { INC_SEIS_ECC: true, SEIS_ECC_VALUE: 5 }, WIND_ECC: { INC_WIND_ECC: true, WIND_ECC_VALUE: 15 } } })
-  for (const db of DB_AFTER_STOR) await req('PUT', `/db/${db}`, { Assign: (P as any)[db] })
+  await storyData(req, P)
   const count = async (db: string) => Object.keys((await req('GET', `/db/${db}`))?.[db] ?? {}).length
   const counts: SendCounts = { NODE: await count('NODE'), ELEM: await count('ELEM'), CONS: await count('CONS'), FBLA: await count('FBLA'), LCOM: await count('LCOM-GEN') }
   const want: SendCounts = { NODE: model.nodes.length, ELEM: model.elements.length, CONS: model.supports.length, FBLA: Object.keys(P.FBLA).length, LCOM: P.combos.length }
   const bad = (Object.keys(want) as (keyof SendCounts)[]).filter((k) => counts[k] !== want[k])
   if (bad.length) throw new Error(`Gen readback mismatch: ${bad.map((k) => `${k} ${counts[k]}/${want[k]}`).join(', ')}`)
   return counts
+}
+
+/** 층 자료 만들기(ope/STOR) + 층에 기대는 자료(질량·RS·조합). 전송 때, 그리고 화면의 해석 직전에 다시 부른다:
+    Gen 에서 절점을 고쳤다 되돌리면(동일성 비교는 통과) Gen 이 해석 때 'Check Changed Story Information' 창을 띄워 MAPI 가 멈춘다.
+    층 자료를 다시 만들면 창이 뜨지 않는다 (라이브 2026-10-21, gen-api-cautions.md 4-2) */
+export const STORY_CALLS = 1 + DB_AFTER_STOR.length
+export async function storyData(req: Request, P: FramePayloads): Promise<void> {
+  await req('POST', '/ope/STOR', { Argument: { SEIS_ECC: { INC_SEIS_ECC: true, SEIS_ECC_VALUE: 5 }, WIND_ECC: { INC_WIND_ECC: true, WIND_ECC_VALUE: 15 } } })
+  for (const db of DB_AFTER_STOR) await req('PUT', `/db/${db}`, { Assign: (P as any)[db] })
 }
 
 export async function analyze(req: Request): Promise<void> {

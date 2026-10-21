@@ -9,6 +9,7 @@ import { QuantityError } from '../domain/quantities'
 import { GenChangedError } from './genSync'
 import { diffText } from '../domain/genSync'
 import { isConnectionError } from '../mapi/timeouts'
+import { F } from '../frame/state'
 
 export class Cancelled extends Error {
   constructor() { super('cancelled') }
@@ -80,7 +81,7 @@ export function failMsg(e: unknown, failKey: (m: string) => string): string {
 }
 
 function failText(e: unknown, failKey: (m: string) => string): string {
-  if (e instanceof Cancelled) return S.built ? t('job_cancelled') : t('job_cancelled_model')
+  if (e instanceof Cancelled) return S.built || F.built ? t('job_cancelled') : t('job_cancelled_model')
   if (e instanceof GenChangedError) return failKey(t('gen_changed', e.diffs.length, e.diffs.slice(0, 5).map((d) => `· ${diffText(d)}`).join('<br>')))
   if (e instanceof ResultValidationError) return failKey(t('results_invalid', [e.table, t(`rv_${e.issue}`), e.where].filter(Boolean).join(' · ')))
   if (e instanceof QuantityError) return failKey(t('q_invalid', e.where))

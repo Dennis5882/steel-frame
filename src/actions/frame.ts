@@ -11,7 +11,7 @@ import { assertGenSync } from './genSync'
 import { isConnectionError } from '../mapi/timeouts'
 import { buildFrame } from '../frame/geometry'
 import { framePayloads } from '../frame/gen'
-import { FRAME_SYNC_DBS, frameSyncPayload, analyze, collectAnalysis, collectForces, COLLECT_CALLS, equilibriumError, expectOk, fitView, runRound, SEND_CALLS, sendFrame, VIEW_CALLS } from '../frame/run'
+import { FRAME_SYNC_DBS, frameSyncPayload, analyze, collectAnalysis, collectForces, COLLECT_CALLS, equilibriumError, expectOk, fitView, runRound, SEND_CALLS, sendFrame, STORY_CALLS, storyData, VIEW_CALLS } from '../frame/run'
 import { storyReview } from '../frame/story'
 import { designMembers, memberFails, runFrameDesign } from '../frame/design'
 import type { Request } from '../frame/results'
@@ -48,7 +48,8 @@ async function sendCore(spec: FrameSpec, model: FrameModel): Promise<void> {
 /** 해석 + 층 표 회수 */
 async function analyzeCore(): Promise<void> {
   const b = F.built!
-  stage('st_anal', 2)
+  stage('st_anal', 2 + STORY_CALLS)
+  await storyData(req, b.P) // Gen 에서 고쳤다 되돌린 모델의 층 확인 창 방지 (run.ts storyData)
   await autoSave('model') // 저장 안 된 문서의 해석은 확인 창을 띄운다 (gen-api-cautions.md 2)
   clearResults()
   notify()
