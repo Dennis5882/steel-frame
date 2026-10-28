@@ -544,6 +544,7 @@ export const en = {
   g_help_2: 'Release notes',
   g_help_2_cmd: 'release notes',
   /* @release-notes — scripts/release.mjs 가 이 줄 아래에 새 버전 키 rn_<id>_<n> 을 넣는다 (손으로 버전·키 추가 금지) */
+  rn_v1_4_6_1: 'Updated the Gen NX connection library (midas-nx 2.10.4); checked live against Gen NX with no change to how the app works.',
   rn_v1_4_5_1: 'Analysis settings changed in Gen (mass, eigenvalue, response spectrum, story data) now stop the analysis with the change listed, instead of being overwritten silently.',
   rn_v1_4_5_2: 'Cancel messages are exact: cancelling the first build before anything reached Gen no longer says the model was partly sent, and a failed save after a complete send no longer reports a Gen change.',
   rn_v1_4_4_1: 'If analysis is interrupted, the previous results are cleared first, so results that no longer match the Gen model are not shown.',
